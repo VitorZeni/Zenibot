@@ -141,8 +141,19 @@ def test_contagem_de_caracteres_soma_todos_os_campos() -> None:
 # ---------------------------------------------------------------------------
 
 
-def canal_falso(nome: str = "geral", canal_id: int = 10) -> SimpleNamespace:
-    return SimpleNamespace(id=canal_id, mention=f"<#{canal_id}>", name=nome)
+def canal_falso(
+    nome: str = "geral", canal_id: int = 10, *, publicavel: bool = True
+) -> SimpleNamespace:
+    perms = discord.Permissions(
+        view_channel=publicavel, send_messages=publicavel, embed_links=publicavel
+    )
+    return SimpleNamespace(
+        id=canal_id,
+        mention=f"<#{canal_id}>",
+        name=nome,
+        guild=SimpleNamespace(me=object()),
+        permissions_for=lambda _membro: perms,
+    )
 
 
 def test_previa_de_rascunho_vazio_mostra_orientacao() -> None:
@@ -173,6 +184,20 @@ def test_status_sem_aviso_dentro_do_limite() -> None:
     view = BuilderView(autor_id=1, canal=canal_falso())
     view.embed.title = "curto"
     assert "⚠️" not in view.status()
+
+
+def test_status_avisa_de_canal_fechado_antes_de_publicar() -> None:
+    """Descobrir que o canal é fechado só no Publicar, depois de montar o
+    embed inteiro, é o pior momento possível."""
+    view = BuilderView(autor_id=1, canal=canal_falso(publicavel=False))
+    assert view.pode_publicar() is False
+    assert "não posso publicar aqui" in view.status()
+
+
+def test_status_normal_quando_o_canal_aceita() -> None:
+    view = BuilderView(autor_id=1, canal=canal_falso(publicavel=True))
+    assert view.pode_publicar() is True
+    assert "não posso publicar" not in view.status()
 
 
 def test_view_expira_para_nao_deixar_rascunho_eterno() -> None:

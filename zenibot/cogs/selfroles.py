@@ -32,6 +32,7 @@ from discord.ext import commands
 from zenibot.bot import Zenibot
 from zenibot.core import embeds
 from zenibot.core.checks import ZenibotError, is_staff
+from zenibot.core.errors import respond_error
 
 log = logging.getLogger(__name__)
 
@@ -187,6 +188,18 @@ class RoleToggleButton(
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        """Trata o erro aqui dentro de propósito.
+
+        Um DynamicItem não passa pelo `on_error` de uma View — a própria
+        documentação do discord.py diz isso —, então uma exceção escaparia
+        para o log e o usuário veria apenas "não respondeu a tempo".
+        """
+        try:
+            await self.toggle(interaction)
+        except Exception as exc:  # noqa: BLE001 — o handler classifica
+            await respond_error(interaction, exc, contexto="botão de self-role")
+
+    async def toggle(self, interaction: discord.Interaction) -> None:
         guild = interaction.guild
         member = interaction.user
         if guild is None or not isinstance(member, discord.Member):

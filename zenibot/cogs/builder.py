@@ -22,6 +22,7 @@ from discord.ext import commands
 from zenibot.bot import Zenibot
 from zenibot.core import embeds
 from zenibot.core.checks import ZenibotError, is_staff
+from zenibot.core.errors import respond_error
 
 log = logging.getLogger(__name__)
 
@@ -189,6 +190,19 @@ class BuilderView(discord.ui.View):
             return False
         return True
 
+    async def on_error(
+        self,
+        interaction: discord.Interaction,
+        error: Exception,
+        item: discord.ui.Item,
+        /,
+    ) -> None:
+        """Sem isto, a implementação padrão apenas registra no log e o usuário
+        recebe "o aplicativo não respondeu a tempo", sem explicação."""
+        await respond_error(
+            interaction, error, contexto=f"painel de embed · {item.__class__.__name__}"
+        )
+
     async def on_timeout(self) -> None:
         for item in self.children:
             item.disabled = True
@@ -209,7 +223,19 @@ class BuilderView(discord.ui.View):
             )
         return self.embed
 
+    def pode_publicar(self) -> bool:
+        perms = self.canal.permissions_for(self.canal.guild.me)
+        return perms.view_channel and perms.send_messages and perms.embed_links
+
     def status(self) -> str:
+        # Avisar aqui, e não só no Publicar: descobrir que o canal é fechado
+        # depois de montar o embed inteiro é o pior momento possível.
+        if not self.pode_publicar():
+            return (
+                f"Destino: {self.canal.mention} · ⚠️ **não posso publicar aqui** "
+                "— faltam permissões nesse canal"
+            )
+
         tamanho = len(self.embed)
         aviso = ""
         if tamanho > LIMITE_TOTAL:
@@ -344,11 +370,11 @@ class BuilderView(discord.ui.View):
                 f"é {LIMITE_TOTAL}."
             )
 
-        perms = self.canal.permissions_for(interaction.guild.me)
-        if not (perms.view_channel and perms.send_messages and perms.embed_links):
+        if not self.pode_publicar():
             raise ZenibotError(
                 f"Preciso de **Ver Canal**, **Enviar Mensagens** e **Inserir "
-                f"Links** em {self.canal.mention}."
+                f"Links** em {self.canal.mention}. Escolha outro canal no "
+                "seletor ou ajuste minhas permissões nesse."
             )
 
         # NO_MENTIONS não é detalhe: sem ele, um anúncio com @everyone no texto

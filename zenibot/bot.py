@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import logging
-import traceback
-import uuid
 
 import discord
 from discord import app_commands
@@ -12,8 +10,8 @@ from discord.ext import commands
 
 from zenibot.config import Settings
 from zenibot.core import embeds
-from zenibot.core.checks import ZenibotError
 from zenibot.core.db import Database
+from zenibot.core.errors import respond_error
 
 log = logging.getLogger(__name__)
 
@@ -111,43 +109,5 @@ class Zenibot(commands.Bot):
         interaction: discord.Interaction,
         error: app_commands.AppCommandError,
     ) -> None:
-        """Erro esperado -> mensagem clara. Inesperado -> ID de correlação.
-
-        Nunca devolvemos o traceback ao usuário: ele pode expor caminhos de
-        arquivo, queries e, no pior caso, segredos.
-        """
-        if isinstance(error, app_commands.CommandInvokeError):
-            error = error.original  # type: ignore[assignment]
-
-        if isinstance(error, ZenibotError):
-            message = str(error)
-        elif isinstance(error, app_commands.CheckFailure):
-            message = "Você não tem permissão para usar este comando."
-        elif isinstance(error, app_commands.CommandOnCooldown):
-            message = f"Aguarde {error.retry_after:.0f}s antes de repetir este comando."
-        elif isinstance(error, discord.Forbidden):
-            message = (
-                "Não tenho permissão para fazer isso. Verifique minhas permissões "
-                "e a posição do meu cargo na hierarquia."
-            )
-        else:
-            trace_id = uuid.uuid4().hex[:8]
-            log.error(
-                "[%s] Erro não tratado em /%s (guild=%s user=%s)\n%s",
-                trace_id,
-                interaction.command.qualified_name if interaction.command else "?",
-                interaction.guild_id,
-                interaction.user.id,
-                "".join(traceback.format_exception(type(error), error, error.__traceback__)),
-            )
-            message = f"Erro interno. Referência para o suporte: `{trace_id}`"
-
-        embed = embeds.error(message)
-        try:
-            if interaction.response.is_done():
-                await interaction.followup.send(embed=embed, ephemeral=True)
-            else:
-                await interaction.response.send_message(embed=embed, ephemeral=True)
-        except discord.HTTPException:
-            # Interação já expirada (3s) — nada a fazer além de registrar.
-            log.warning("Não foi possível responder à interação com o erro.")
+        nome = interaction.command.qualified_name if interaction.command else "?"
+        await respond_error(interaction, error, contexto=f"/{nome}")
