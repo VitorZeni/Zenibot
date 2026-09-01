@@ -379,23 +379,38 @@ tudo dentro de `core/db.py`:
       próprio, isolado do bucket do bot
 - [ ] **Gestão de regras do AutoMod** por slash command
 - [ ] **Guild Scheduled Events** — espelhar em banco e lembrar os interessados
-- [ ] **Testes** com `pytest` + `dpytest`
+- [ ] **Testes de integração** com `dpytest` (a suíte atual cobre lógica e
+      persistência, mas não o ciclo completo de uma interação)
 
 ---
 
 ## Desenvolvimento
 
-Smoke test — valida config, migrações, carga dos cogs, árvore de comandos e a
-camada de banco. Não precisa de token nem de rede:
+### Testes
+
+85 testes, nenhum toca a rede ou o Discord — banco temporário por teste e
+credenciais falsas. Instale as dependências de desenvolvimento e rode:
 
 ```bash
-python scripts/smoke_test.py
+pip install -e ".[dev]"
 ```
 
-Teste do supervisor de reconexão (também sem token e sem rede):
+```bash
+pytest
+```
+
+| Arquivo | Cobre |
+|---|---|
+| `tests/test_core.py` | Duração, redação de token no log, regras de escalonamento, janela anti-raid, segurança dos self-roles |
+| `tests/test_db.py` | Config por guild, casos, regras, fila de jobs, backup, migrações sobre banco povoado |
+| `tests/test_bot.py` | Configuração, intents, carga de cogs, árvore de comandos, backup e retenção |
+| `tests/test_supervise.py` | Reconexão com backoff e os erros que **não** devem ser repetidos |
+
+Para validar uma **imagem Docker** — onde a suíte não existe, por ser
+dependência de desenvolvimento — use a verificação de deploy:
 
 ```bash
-python scripts/test_reconnect.py
+docker run --rm zenibot:latest python scripts/healthcheck.py
 ```
 
 Recarregar um cog sem reiniciar o bot: `/reload cog:moderation`

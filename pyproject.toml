@@ -19,6 +19,20 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "ruff>=0.6",
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# asyncio_mode=auto: testes async rodam sem precisar de decorador em cada um.
+asyncio_mode = "auto"
+addopts = "-q --strict-markers"
+filterwarnings = [
+    "error",
+    # discord.py 2.7 usa asyncio.iscoroutinefunction, depreciado no 3.14.
+    # Vem da biblioteca, não do projeto.
+    "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning",
 ]
 
 # Explícito: sem isto o setuptools tenta empacotar migrations/ e scripts/

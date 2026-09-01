@@ -16,6 +16,10 @@ __pycache__/
 .ruff_cache/
 .pytest_cache/
 
+# Testes: a suíte é dependência de desenvolvimento e não vai para a imagem.
+# Para validar um build, use scripts/healthcheck.py.
+tests/
+
 # Metadados de repositório e docs
 .git/
 .gitignore

@@ -28,7 +28,14 @@ MAX_TIMEOUT = timedelta(days=28)
 
 def parse_duration(text: str) -> timedelta:
     """Converte "1h30m" em timedelta. Levanta ZenibotError se inválido."""
-    matches = _PATTERN.findall(text.strip())
+    text = text.strip()
+
+    # O regex casa apenas dígitos, então "-5m" viraria 5 minutos com o sinal
+    # silenciosamente descartado. Duração negativa não tem significado aqui.
+    if "-" in text:
+        raise ZenibotError("A duração não pode ser negativa.")
+
+    matches = _PATTERN.findall(text)
     if not matches:
         raise ZenibotError(
             "Duração inválida. Use formatos como `30m`, `2h`, `1h30m` ou `7d`."
