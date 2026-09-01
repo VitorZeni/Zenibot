@@ -32,9 +32,17 @@ Python 3.11+ (validado em **3.14.7**).
 python -m venv .venv
 ```
 
+Ative o ambiente. **No PowerShell** (note o `.\` — sem ele o PowerShell tenta
+carregar `.venv` como módulo e falha com `CouldNotAutoLoadModule`):
+
 ```bash
-.venv\Scripts\activate
+.\.venv\Scripts\Activate.ps1
 ```
+
+No `cmd.exe`, use `.venv\Scripts\activate.bat`. Se o PowerShell bloquear o
+script por política de execução, pule a ativação e chame o interpretador do
+venv diretamente em todos os comandos:
+`& .\.venv\Scripts\python.exe <script>`
 
 ```bash
 pip install -e .
@@ -71,6 +79,8 @@ Aba **OAuth2 → URL Generator**: escopos `bot` + `applications.commands`, e as 
 
 ### 6. Registrar os comandos e subir
 
+Com o venv ativado:
+
 ```bash
 python scripts/sync_commands.py
 ```
@@ -78,6 +88,15 @@ python scripts/sync_commands.py
 ```bash
 python -m zenibot
 ```
+
+Sem ativar o venv, no PowerShell:
+
+```bash
+& .\.venv\Scripts\python.exe scripts\sync_commands.py
+```
+
+Ambos funcionam de qualquer diretório: o projeto resolve `.env`, o banco e as
+migrações a partir da raiz do pacote, não do diretório atual.
 
 Em produção, registre globalmente (propagação de até 1h):
 
