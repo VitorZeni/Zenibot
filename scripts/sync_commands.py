@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import discord  # noqa: E402
 
-from zenibot.bot import INITIAL_COGS, Zenibot  # noqa: E402
+from zenibot.bot import Zenibot  # noqa: E402
 from zenibot.config import load_settings  # noqa: E402
 from zenibot.core.logging_setup import setup_logging  # noqa: E402
 
@@ -41,12 +41,11 @@ async def main(escopo_global: bool, limpar: bool) -> None:
 
     bot = Zenibot(settings)
 
-    # Só precisamos da árvore de comandos montada — não do Gateway.
-    await bot.db.connect()
-    for cog in INITIAL_COGS:
-        await bot.load_extension(cog)
-
     async with bot:
+        # login() já dispara o setup_hook(), que conecta o banco e carrega os
+        # cogs. Fazer isso manualmente aqui antes causaria
+        # ExtensionAlreadyLoaded nos cinco cogs. Não abrimos o Gateway: só
+        # precisamos da árvore de comandos montada.
         await bot.login(settings.token)
 
         if escopo_global:
@@ -61,13 +60,30 @@ async def main(escopo_global: bool, limpar: bool) -> None:
                 bot.tree.clear_commands(guild=guild)
             else:
                 bot.tree.copy_global_to(guild=guild)
-            comandos = await bot.tree.sync(guild=guild)
+            try:
+                comandos = await bot.tree.sync(guild=guild)
+            except discord.Forbidden as exc:
+                # 50001 aqui quase sempre significa convite sem o escopo
+                # applications.commands — o bot está no servidor, mas não tem
+                # direito de registrar slash commands nele.
+                print(
+                    f"\n403 Missing Access ao registrar na guild "
+                    f"{settings.dev_guild_id}.\n\n"
+                    "Causa provável: o bot foi convidado sem o escopo "
+                    "'applications.commands'.\n"
+                    "Gere um novo convite no Developer Portal (OAuth2 > URL "
+                    "Generator) marcando\n"
+                    "os escopos 'bot' E 'applications.commands', e abra a URL "
+                    "para o mesmo servidor.\n"
+                    "Reconvidar não remove o bot nem apaga nada — apenas "
+                    "concede o escopo faltante.\n",
+                    file=sys.stderr,
+                )
+                raise SystemExit(1) from exc
             print(f"{len(comandos)} comando(s) sincronizado(s) na guild {settings.dev_guild_id}.")
 
         for cmd in sorted(c.name for c in comandos):
             print(f"  /{cmd}")
-
-    await bot.db.close()
 
 
 if __name__ == "__main__":
