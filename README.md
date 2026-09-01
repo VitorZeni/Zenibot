@@ -168,6 +168,14 @@ IP pela Cloudflare.
 **Erros nunca vazam traceback.** Erro esperado vira mensagem clara; inesperado
 vira um ID de correlação de 8 caracteres que aparece no log do servidor.
 
+**Falha de rede não derruba o processo.** O `discord.py` já reconecta sozinho
+depois de conectado, mas não cobre o `login()` inicial: sem DNS na partida, a
+exceção sobe e mata o bot. O supervisor em `__main__.py` fecha essa lacuna com
+backoff exponencial (5s → 300s, com jitter), reiniciando a contagem após uma
+sessão estável de 60s. Erros de configuração — token inválido, intent
+privilegiado faltando — são explicitamente **não** retentáveis: repetir nunca
+resolveria, então o processo sai com a mensagem do que corrigir.
+
 **Autorização em três camadas:** `default_permissions` (UX, esconde o comando)
 + checagem no handler (segurança real) + `staff_role_ids` por guild
 (cargos customizados). A primeira camada sozinha não é segurança — admins podem
@@ -216,6 +224,12 @@ camada de banco. Não precisa de token nem de rede:
 
 ```bash
 python scripts/smoke_test.py
+```
+
+Teste do supervisor de reconexão (também sem token e sem rede):
+
+```bash
+python scripts/test_reconnect.py
 ```
 
 Recarregar um cog sem reiniciar o bot: `/reload cog:moderation`
