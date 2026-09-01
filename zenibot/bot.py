@@ -48,7 +48,13 @@ def build_intents() -> discord.Intents:
 
 
 class Zenibot(commands.Bot):
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, *, background_tasks: bool = True) -> None:
+        """`background_tasks=False` para scripts utilitários.
+
+        Sem isso, rodar sync_commands.py ou list_commands.py dispara o loop de
+        backup — e, com a retenção ativa, backups espúrios de scripts acabam
+        expulsando os legítimos da janela.
+        """
         super().__init__(
             command_prefix=commands.when_mentioned,  # sem prefixo: tudo é slash
             intents=build_intents(),
@@ -57,6 +63,7 @@ class Zenibot(commands.Bot):
             max_messages=None,  # sem cache de mensagens: não usamos o conteúdo
         )
         self.settings = settings
+        self.background_tasks = background_tasks
         self.db = Database(settings.db_file)
         self.tree.on_error = self.on_app_command_error
 

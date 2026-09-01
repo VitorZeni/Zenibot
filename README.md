@@ -111,7 +111,21 @@ Sem ativar o venv, no PowerShell:
 Ambos funcionam de qualquer diretório: o projeto resolve `.env`, o banco e as
 migrações a partir da raiz do pacote, não do diretório atual.
 
-Em produção, registre globalmente (propagação de até 1h):
+Para inspecionar o que está registrado, e em qual escopo:
+
+```bash
+python scripts/list_commands.py
+```
+
+> **Comandos duplicados no Discord?** Quase sempre é o mesmo comando
+> registrado nos dois escopos — global **e** por servidor. O cliente mostra
+> os dois, sem erro nenhum. Confirme com `list_commands.py` e remova um dos
+> lados: `sync_commands.py --global --clear` apaga os globais (recomendado
+> para poucos servidores, já que o escopo de guild propaga na hora), ou
+> `sync_commands.py --clear` apaga os da guild.
+
+Em produção com muitos servidores, registre globalmente (propagação de até 1h)
+— e **não** sincronize por guild, ou os comandos duplicam:
 
 ```bash
 python scripts/sync_commands.py --global

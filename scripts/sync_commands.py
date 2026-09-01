@@ -39,7 +39,7 @@ async def main(escopo_global: bool, limpar: bool) -> None:
         )
         raise SystemExit(1)
 
-    bot = Zenibot(settings)
+    bot = Zenibot(settings, background_tasks=False)
 
     async with bot:
         # login() já dispara o setup_hook(), que conecta o banco e carrega os
@@ -84,6 +84,34 @@ async def main(escopo_global: bool, limpar: bool) -> None:
 
         for cmd in sorted(c.name for c in comandos):
             print(f"  /{cmd}")
+
+        await avisar_duplicidade(bot, settings, escopo_global)
+
+
+async def avisar_duplicidade(bot: Zenibot, settings, escopo_global: bool) -> None:
+    """Alerta se os comandos também existem no outro escopo.
+
+    Um comando registrado global E por guild aparece DUAS VEZES na lista do
+    cliente do Discord. É silencioso — nada falha, só fica duplicado.
+    """
+    if escopo_global:
+        if settings.dev_guild_id is None:
+            return
+        alvo = discord.Object(id=settings.dev_guild_id)
+        outros = {c.name for c in await bot.tree.fetch_commands(guild=alvo)}
+        onde = f"na guild {settings.dev_guild_id}"
+        remedio = "python scripts/sync_commands.py --clear"
+    else:
+        outros = {c.name for c in await bot.tree.fetch_commands()}
+        onde = "globalmente"
+        remedio = "python scripts/sync_commands.py --global --clear"
+
+    if outros:
+        print(
+            f"\nAVISO: {len(outros)} comando(s) também registrado(s) {onde}.\n"
+            "Comandos presentes nos dois escopos aparecem DUPLICADOS no Discord.\n"
+            f"Para remover os do outro escopo:\n\n    {remedio}\n"
+        )
 
 
 if __name__ == "__main__":

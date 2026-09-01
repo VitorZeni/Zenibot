@@ -197,12 +197,32 @@ class Admin(commands.Cog):
         if global_:
             synced = await self.bot.tree.sync()
             escopo = "globalmente"
+            # Registrar nos dois escopos duplica cada comando na lista do
+            # cliente, sem erro nenhum — falha silenciosa clássica.
+            no_outro = len(await self.bot.tree.fetch_commands(guild=interaction.guild))
+            aviso = (
+                f"\n\n⚠️ Há {no_outro} comando(s) também registrado(s) neste "
+                "servidor. Comandos nos dois escopos aparecem **duplicados**. "
+                "Limpe um dos lados com `scripts/sync_commands.py --clear`."
+                if no_outro
+                else ""
+            )
         else:
             self.bot.tree.copy_global_to(guild=interaction.guild)
             synced = await self.bot.tree.sync(guild=interaction.guild)
             escopo = "neste servidor"
+            no_outro = len(await self.bot.tree.fetch_commands())
+            aviso = (
+                f"\n\n⚠️ Há {no_outro} comando(s) também registrado(s) "
+                "globalmente. Comandos nos dois escopos aparecem "
+                "**duplicados**. Limpe os globais com "
+                "`scripts/sync_commands.py --global --clear`."
+                if no_outro
+                else ""
+            )
+
         await interaction.followup.send(
-            embed=embeds.ok(f"{len(synced)} comando(s) sincronizado(s) {escopo}."),
+            embed=embeds.ok(f"{len(synced)} comando(s) sincronizado(s) {escopo}.{aviso}"),
             ephemeral=True,
         )
 

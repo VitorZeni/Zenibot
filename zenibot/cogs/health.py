@@ -41,7 +41,9 @@ class Health(commands.Cog):
         self._announced = False
 
         horas = bot.settings.backup_interval_hours
-        if horas > 0:
+        if not bot.background_tasks:
+            log.debug("Tarefas de fundo desativadas (script utilitário)")
+        elif horas > 0:
             self.backup_loop.change_interval(hours=horas)
             self.backup_loop.start()
         else:

@@ -60,9 +60,9 @@ async def main() -> None:
     check("message_content DESABILITADO", not intents.message_content)
 
     print("\n[3] Boot: migrações + carga de cogs")
-    bot = Zenibot(settings)
-    # "async with" inicializa o cliente do mesmo jeito que o entrypoint real,
-    # senão o wait_until_ready() do scheduler estoura RuntimeError.
+    # background_tasks=False: um script não deve disparar backup nem o poller.
+    bot = Zenibot(settings, background_tasks=False)
+    # "async with" inicializa o cliente do mesmo jeito que o entrypoint real.
     await bot.__aenter__()
     await bot.setup_hook()
     cogs = sorted(bot.cogs)
@@ -194,9 +194,13 @@ async def main() -> None:
     import aiosqlite
 
     health = bot.get_cog("Health")
-    # O cog inicia o loop de backup no __init__; paramos para o teste de poda
-    # não competir com uma execução automática.
-    health.backup_loop.cancel()
+    # Regressão: um script utilitário disparava backup só por instanciar o bot,
+    # e com a retenção ativa isso expulsava backups legítimos da janela.
+    check("loop de backup parado em script", not health.backup_loop.is_running())
+    check(
+        "poller do scheduler parado em script",
+        not bot.get_cog("Scheduler").process_jobs.is_running(),
+    )
 
     destino = TMP_DB.parent / "zenibot_bkp" / "zenibot-20260101-000000.db"
     tamanho = await bot.db.backup(destino)

@@ -33,7 +33,8 @@ class Scheduler(commands.Cog):
             "reminder": self.run_reminder,
             "unban": self.run_unban,
         }
-        self.process_jobs.start()
+        if bot.background_tasks:
+            self.process_jobs.start()
 
     async def cog_unload(self) -> None:
         self.process_jobs.cancel()
