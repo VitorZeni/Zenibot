@@ -1,0 +1,33 @@
+services:
+  zenibot:
+    build: .
+    image: zenibot:latest
+    container_name: zenibot
+
+    # O token vem do .env, que está no .gitignore e no .dockerignore.
+    # Nenhum segredo é embutido na imagem.
+    env_file: .env
+
+    # O caminho do banco é relativo a /app; o volume abaixo o preserva
+    # entre recriações do container.
+    environment:
+      ZENIBOT_DB_PATH: data/zenibot.db
+
+    volumes:
+      - zenibot-data:/app/data
+
+    # Complementa o supervisor interno: ele cobre falhas de rede transitórias
+    # dentro do processo; isto cobre o processo morrer de vez.
+    restart: unless-stopped
+
+    # Tempo para o SIGTERM fechar WebSocket e banco antes do SIGKILL.
+    stop_grace_period: 20s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  zenibot-data:

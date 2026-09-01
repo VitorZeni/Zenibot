@@ -116,6 +116,46 @@ python scripts/sync_commands.py --global
 
 ---
 
+## Deploy com Docker
+
+Requer o `.env` preenchido (o mesmo do setup local). O token **não** entra na
+imagem: ele é injetado em tempo de execução via `env_file`.
+
+```bash
+docker compose up -d --build
+```
+
+Registrar os slash commands (uma vez, ou quando os comandos mudarem):
+
+```bash
+docker compose run --rm zenibot python scripts/sync_commands.py
+```
+
+Acompanhar os logs:
+
+```bash
+docker compose logs -f
+```
+
+Detalhes que valem saber:
+
+- **Imagem de ~250 MB**, multi-stage: as ferramentas de build ficam no estágio
+  descartado. O `pip install` só reexecuta quando o `pyproject.toml` muda.
+- **Roda como `zenibot` (uid 10001)**, nunca root.
+- **O banco vive no volume `zenibot-data`** montado em `/app/data`. Sem ele os
+  dados morreriam a cada `docker compose up --build`. Para backup, copie
+  `/app/data/zenibot.db` de dentro do container.
+- **`docker stop` é gracioso**: o `python` é PID 1 (forma exec no `CMD`) e
+  recebe o SIGTERM direto; o handler fecha WebSocket e banco antes de sair.
+  Medido em 0,3s, bem abaixo do `stop_grace_period` de 20s.
+- **`restart: unless-stopped`** complementa o supervisor interno: ele cobre
+  falhas de rede dentro do processo, o Docker cobre o processo morrer de vez.
+- O código **não** é instalado em `site-packages` de propósito. `config.py` e
+  `db.py` resolvem `.env`, o banco e `migrations/` relativos à raiz do pacote;
+  instalado no venv, essa raiz apontaria para o lugar errado e as migrações
+  não seriam encontradas. O estágio de build instala as dependências e depois
+  desinstala o pacote.
+
 ## Documentos legais
 
 - [Termos de Serviço](docs/termos-de-servico.md)
@@ -213,7 +253,6 @@ tudo dentro de `core/db.py`:
 - [ ] **Gestão de regras do AutoMod** por slash command
 - [ ] **Guild Scheduled Events** — espelhar em banco e lembrar os interessados
 - [ ] **Testes** com `pytest` + `dpytest`
-- [ ] **Dockerfile** e deploy
 
 ---
 

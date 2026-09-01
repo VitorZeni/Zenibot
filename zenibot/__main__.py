@@ -62,7 +62,10 @@ async def supervise(settings: Settings) -> None:
             return
         stopping.set()
         log.info("Sinal de encerramento recebido.")
-        if current is not None:
+        # Durante a espera do backoff o bot já foi fechado pelo `async with`;
+        # sem o is_closed() logaríamos um "Encerrando..." redundante depois do
+        # "Encerrado.".
+        if current is not None and not current.is_closed():
             asyncio.create_task(current.close())
 
     # No Windows add_signal_handler não existe; lá o Ctrl+C chega como

@@ -1,0 +1,31 @@
+# Segredos e dados locais — nunca devem entrar na imagem.
+.env
+*.env
+!.env.example
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Ambiente local
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ruff_cache/
+.pytest_cache/
+
+# Metadados de repositório e docs
+.git/
+.gitignore
+.github/
+docs/
+*.md
+!README.md
+
+# Editores / SO
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
