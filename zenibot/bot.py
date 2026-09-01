@@ -26,6 +26,7 @@ INITIAL_COGS = (
     "zenibot.cogs.selfroles",
     "zenibot.cogs.health",
     "zenibot.cogs.escalation",
+    "zenibot.cogs.antiraid",
 )
 
 

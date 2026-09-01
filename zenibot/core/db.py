@@ -52,6 +52,10 @@ class GuildConfig:
     autorole_id: int | None = None
     min_account_age_days: int = 0
     staff_role_ids: list[int] = field(default_factory=list)
+    raid_joins: int = 0
+    raid_window_s: int = 60
+    raid_action: str = "alert"
+    raid_lockdown_minutes: int = 15
 
     @classmethod
     def from_row(cls, row: aiosqlite.Row) -> GuildConfig:
@@ -64,6 +68,10 @@ class GuildConfig:
             autorole_id=row["autorole_id"],
             min_account_age_days=row["min_account_age_days"],
             staff_role_ids=json.loads(row["staff_role_ids"]),
+            raid_joins=row["raid_joins"],
+            raid_window_s=row["raid_window_s"],
+            raid_action=row["raid_action"],
+            raid_lockdown_minutes=row["raid_lockdown_minutes"],
         )
 
 
@@ -248,6 +256,10 @@ class Database:
             "autorole_id",
             "min_account_age_days",
             "staff_role_ids",
+            "raid_joins",
+            "raid_window_s",
+            "raid_action",
+            "raid_lockdown_minutes",
         }
         unknown = set(fields) - allowed
         if unknown:
@@ -434,6 +446,17 @@ class Database:
         rows = await cursor.fetchall()
         await self.conn.commit()
         return [Job.from_row(row) for row in rows]
+
+    async def get_pending_job(self, guild_id: int, kind: str) -> Job | None:
+        """Job pendente mais próximo daquele tipo — usado para desfazer algo
+        antes da hora (ex.: liberar um bloqueio anti-raid manualmente)."""
+        cursor = await self.conn.execute(
+            "SELECT * FROM schedules WHERE guild_id = ? AND kind = ?"
+            "   AND done_at IS NULL ORDER BY run_at LIMIT 1",
+            (guild_id, kind),
+        )
+        row = await cursor.fetchone()
+        return Job.from_row(row) if row else None
 
     async def mark_done(self, job_id: int) -> None:
         await self.conn.execute(

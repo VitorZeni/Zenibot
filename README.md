@@ -18,6 +18,7 @@ Base arquitetural documentada em [GUIA-BOTS-DISCORD.md](GUIA-BOTS-DISCORD.md).
 | `cogs/selfroles.py` | `/painel criar`, `/painel adicionar`, `/painel remover` — botões persistentes de auto-atribuição de cargos |
 | `cogs/health.py` | Backup automático do banco, `/backup`, aviso de inicialização |
 | `cogs/escalation.py` | `/escalonamento ver`, `definir`, `remover` — punições automáticas por número de infrações |
+| `cogs/antiraid.py` | `/antiraid ver`, `configurar`, `liberar` — detecção de picos de entrada |
 
 **Ainda não implementado** (ver "Próximos passos"): gestão de regras do AutoMod via comando, Guild Scheduled Events, anti-raid.
 
@@ -45,6 +46,28 @@ Monte a régua e o `/aviso` passa a aplicar a punição sozinho:
 Conta infrações **ativas dos últimos 30 dias**. Se a hierarquia impedir a
 punição, o moderador é avisado na resposta do `/aviso` e nada fica registrado
 como se tivesse sido aplicado.
+
+### Anti-raid
+
+```
+/antiraid configurar entradas:5 janela:30s acao:Somente alertar
+/antiraid ver
+```
+
+Detecta picos por janela deslizante de entradas. O alerta menciona os cargos
+de staff, mostra quantas contas são recém-criadas e lista os primeiros que
+entraram.
+
+A ação `Bloquear servidor e alertar` pausa convites e eleva a verificação por
+um tempo, restaurando o estado anterior depois. **Exige a permissão Gerenciar
+Servidor**, que não está no convite padrão — o bot avisa se ela faltar, e o
+alerta continua funcionando. Para concedê-la, reconvide com:
+
+```
+https://discord.com/oauth2/authorize?client_id=1544424196686356480&permissions=1100317027494&scope=bot+applications.commands
+```
+
+`/antiraid liberar` remove o bloqueio antes da hora.
 
 ---
 
@@ -293,6 +316,14 @@ para qualquer membro. A checagem roda ao montar o painel **e de novo a cada
 clique**, porque as permissões de um cargo podem mudar depois. Quem cria o
 painel também não pode expor cargo igual ou acima do seu próprio.
 
+**Anti-raid detecta em memória, mas desfaz com estado persistido.** A janela
+deslizante de entradas vive só na RAM — um raid é, por definição, algo
+acontecendo agora, e persistir isso só criaria o risco de reagir a um pico já
+passado. O **bloqueio**, porém, é o oposto: o estado anterior do servidor
+(nível de verificação, convites pausados) vai no payload de um job na fila
+persistente. Sem isso, um restart durante o bloqueio deixaria o servidor
+trancado para sempre.
+
 **Escalonamento dispara no limiar exato, e não se realimenta.** Duas decisões
 que evitam comportamento surpreendente: a regra da 3ª infração dispara na 3ª,
 não em toda infração a partir dela — com `>=`, o servidor aplicaria a mesma
@@ -346,7 +377,6 @@ tudo dentro de `core/db.py`:
 
 - [ ] **Logs via webhook** em vez de `channel.send()` — bucket de rate limit
       próprio, isolado do bucket do bot
-- [ ] **Anti-raid** — janela deslizante de entradas em `on_member_join`
 - [ ] **Gestão de regras do AutoMod** por slash command
 - [ ] **Guild Scheduled Events** — espelhar em banco e lembrar os interessados
 - [ ] **Testes** com `pytest` + `dpytest`

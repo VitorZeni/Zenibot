@@ -66,7 +66,7 @@ async def main() -> None:
     await bot.__aenter__()
     await bot.setup_hook()
     cogs = sorted(bot.cogs)
-    check("8 cogs carregados", len(cogs) == 8, ", ".join(cogs))
+    check("9 cogs carregados", len(cogs) == 9, ", ".join(cogs))
 
     print("\n[4] Árvore de comandos")
     comandos = sorted(c.qualified_name for c in bot.tree.walk_commands())
@@ -81,6 +81,7 @@ async def main() -> None:
         "backup",
         "escalonamento", "escalonamento ver", "escalonamento definir",
         "escalonamento remover",
+        "antiraid", "antiraid ver", "antiraid configurar", "antiraid liberar",
     }
     faltando = esperados - set(comandos)
     check(f"{len(comandos)} comandos registrados", not faltando, f"faltando: {faltando}")
@@ -345,8 +346,72 @@ async def main() -> None:
         (await legado_db.get_user_cases(1, 2))[0].reason == "antigo",
     )
     check("tabela nova criada no banco antigo", await legado_db.get_escalation_rules(1) == [])
+    check(
+        "colunas anti-raid ganham padrao no banco antigo",
+        (await legado_db.get_config(1)).raid_joins == 0,
+    )
     await legado_db.close()
     legado.unlink(missing_ok=True)
+
+    print("\n[16] Anti-raid: janela deslizante")
+    from zenibot.core.antiraid import JoinWindow
+
+    t0 = 1000.0
+    janela = JoinWindow()
+    for i in range(5):
+        janela.record(1, 100 + i, t0 + i)
+    check("conta entradas dentro da janela", len(janela.recent(1, 30, t0 + 4)) == 5)
+    check("descarta o que saiu da janela", janela.recent(1, 3, t0 + 10) == [])
+
+    isolada = JoinWindow()
+    isolada.record(1, 11, t0)
+    isolada.record(2, 22, t0)
+    check(
+        "guilds nao se contaminam",
+        isolada.recent(1, 60, t0) == [11] and isolada.recent(2, 60, t0) == [22],
+    )
+    isolada.clear(1)
+    check("clear esvazia a guild", isolada.recent(1, 60, t0) == [])
+
+    limitada = JoinWindow(max_por_guild=3)
+    for i in range(10):
+        limitada.record(7, i, t0 + i)
+    check(
+        "teto por guild impede crescimento sem fim",
+        len(limitada.recent(7, 9999, t0 + 9)) == 3,
+    )
+
+    print("\n[17] Anti-raid: configuracao e bloqueio")
+    await bot.db.set_config(
+        42, raid_joins=5, raid_window_s=30, raid_action="lockdown",
+        raid_lockdown_minutes=20,
+    )
+    cfg = await bot.db.get_config(42)
+    check(
+        "config anti-raid persiste",
+        (cfg.raid_joins, cfg.raid_window_s, cfg.raid_action, cfg.raid_lockdown_minutes)
+        == (5, 30, "lockdown", 20),
+    )
+    check("guild nova nasce com anti-raid desativado",
+          (await bot.db.get_config(77)).raid_joins == 0)
+
+    # O estado a restaurar viaja no job: é isso que impede um restart durante
+    # o bloqueio de deixar o servidor trancado para sempre.
+    jid = await bot.db.schedule(
+        guild_id=42, user_id=1, kind="raid_end",
+        run_at=now() + timedelta(minutes=10),
+        payload={"verification_level": 2, "invites_paused": False},
+    )
+    job = await bot.db.get_pending_job(42, "raid_end")
+    check(
+        "job de bloqueio guarda o estado anterior",
+        job is not None and job.id == jid and job.payload["verification_level"] == 2,
+    )
+    await bot.db.mark_done(jid)
+    check(
+        "job concluido nao reaparece",
+        await bot.db.get_pending_job(42, "raid_end") is None,
+    )
 
     await bot.close()
     TMP_DB.unlink(missing_ok=True)

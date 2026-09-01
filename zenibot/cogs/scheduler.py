@@ -15,7 +15,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from zenibot.bot import Zenibot
-from zenibot.core import embeds
+from zenibot.core import antiraid, embeds
 from zenibot.core.db import Job, now
 from zenibot.core.duration import humanize, parse_duration
 
@@ -32,6 +32,7 @@ class Scheduler(commands.Cog):
         self.handlers = {
             "reminder": self.run_reminder,
             "unban": self.run_unban,
+            "raid_end": self.run_raid_end,
         }
         if bot.background_tasks:
             self.process_jobs.start()
@@ -123,6 +124,18 @@ class Scheduler(commands.Cog):
         except discord.NotFound:
             # Já foi desbanido manualmente: sucesso do ponto de vista do job.
             log.info("Usuário %s já não estava banido na guild %s", job.user_id, job.guild_id)
+
+    async def run_raid_end(self, job: Job) -> None:
+        """Restaura o servidor após um bloqueio anti-raid.
+
+        O estado anterior viaja no payload do job, então um restart no meio do
+        bloqueio não deixa o servidor trancado para sempre.
+        """
+        guild = self.bot.get_guild(job.guild_id)
+        if guild is None:
+            log.warning("Guild %s inacessível; bloqueio não liberado", job.guild_id)
+            return
+        await antiraid.lift_lockdown(guild, job.payload)
 
     # ------------------------------------------------------------------
     # Comandos
