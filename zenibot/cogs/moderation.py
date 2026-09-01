@@ -16,7 +16,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from zenibot.bot import Zenibot
-from zenibot.core import embeds
+from zenibot.core import embeds, escalation
 from zenibot.core.checks import ZenibotError, assert_can_moderate, is_staff
 from zenibot.core.db import now
 from zenibot.core.duration import MAX_TIMEOUT, humanize, parse_duration
@@ -42,6 +42,19 @@ class Moderation(commands.Cog):
             return True
         except (discord.Forbidden, discord.HTTPException):
             return False
+
+    async def send_log(self, guild: discord.Guild, embed: discord.Embed) -> None:
+        """Espelha no canal de logs, se houver um configurado."""
+        cfg = await self.bot.db.get_config(guild.id)
+        if not cfg.log_channel_id:
+            return
+        channel = guild.get_channel(cfg.log_channel_id)
+        if channel is None:
+            return
+        try:
+            await channel.send(embed=embed, allowed_mentions=embeds.NO_MENTIONS)
+        except discord.HTTPException:
+            log.warning("Falha ao escrever no canal de logs da guild %s", guild.id)
 
     async def record(
         self,
@@ -71,15 +84,7 @@ class Moderation(commands.Cog):
             duration=humanize(duration) if duration else None,
         )
 
-        cfg = await self.bot.db.get_config(interaction.guild_id)
-        if cfg.log_channel_id:
-            channel = interaction.guild.get_channel(cfg.log_channel_id)
-            if channel is not None:
-                try:
-                    await channel.send(embed=embed, allowed_mentions=embeds.NO_MENTIONS)
-                except discord.HTTPException:
-                    log.warning("Falha ao escrever no canal de logs da guild %s",
-                                interaction.guild_id)
+        await self.send_log(interaction.guild, embed)
         return case_number
 
     # ------------------------------------------------------------------
@@ -99,13 +104,42 @@ class Moderation(commands.Cog):
         case = await self.record(interaction, target=membro, action="warn", reason=motivo)
 
         total = await self.bot.db.count_active_cases(interaction.guild_id, membro.id)
+        extra = await self.escalate(interaction, membro, total)
+
         await interaction.followup.send(
             embed=embeds.ok(
                 f"Aviso registrado como caso **#{case}**.\n"
                 f"{membro.mention} tem **{total}** infração(ões) nos últimos 30 dias."
+                f"{extra}"
             ),
             ephemeral=True,
         )
+
+    async def escalate(
+        self, interaction: discord.Interaction, membro: discord.Member, total: int
+    ) -> str:
+        """Aplica a régua de escalonamento, se o total bateu num limiar."""
+        regras = await self.bot.db.get_escalation_rules(interaction.guild_id)
+        regra = escalation.rule_for_count(regras, total)
+        if regra is None:
+            return ""
+
+        aplicada = await escalation.apply_rule(self.bot, membro, regra, count=total)
+        if aplicada is None:
+            return (
+                f"\n\n⚠️ A regra da {total}ª infração (**{escalation.describe(regra)}**) "
+                "não pôde ser aplicada — hierarquia ou permissão. Veja o log."
+            )
+
+        await self.send_log(
+            interaction.guild,
+            embeds.warn(
+                f"{membro.mention} (`{membro.id}`) atingiu **{total}** infrações.\n"
+                f"Punição aplicada automaticamente: **{aplicada}**.",
+                title="Escalonamento automático",
+            ),
+        )
+        return f"\n\n**Escalonamento automático:** {aplicada}."
 
     @app_commands.command(name="silenciar", description="Timeout temporário (máx. 28 dias)")
     @app_commands.describe(

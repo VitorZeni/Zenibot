@@ -66,7 +66,7 @@ async def main() -> None:
     await bot.__aenter__()
     await bot.setup_hook()
     cogs = sorted(bot.cogs)
-    check("7 cogs carregados", len(cogs) == 7, ", ".join(cogs))
+    check("8 cogs carregados", len(cogs) == 8, ", ".join(cogs))
 
     print("\n[4] Árvore de comandos")
     comandos = sorted(c.qualified_name for c in bot.tree.walk_commands())
@@ -79,6 +79,8 @@ async def main() -> None:
         "config autorole", "config idade-minima", "config staff",
         "painel", "painel criar", "painel adicionar", "painel remover",
         "backup",
+        "escalonamento", "escalonamento ver", "escalonamento definir",
+        "escalonamento remover",
     }
     faltando = esperados - set(comandos)
     check(f"{len(comandos)} comandos registrados", not faltando, f"faltando: {faltando}")
@@ -190,7 +192,64 @@ async def main() -> None:
     )
     check("view persistente nao expira", discord.ui.View(timeout=None).timeout is None)
 
-    print("\n[12] Backup do banco")
+    print("\n[12] Escalonamento automático")
+    from zenibot.core.escalation import rule_for_count, validate
+
+    await bot.db.add_case(
+        guild_id=42, user_id=1, moderator_id=9, action="timeout",
+        reason="auto", duration_s=3600, automatic=True,
+    )
+    contagem = await bot.db.count_active_cases(42, 1)
+    # O ponto central do desenho: contá-la faria a régua andar sozinha.
+    check("punicao automatica NAO conta para o limiar", contagem == 2, str(contagem))
+    check(
+        "mas continua no historico para auditoria",
+        len(await bot.db.get_user_cases(42, 1)) == 3,
+    )
+
+    await bot.db.set_escalation_rule(42, 3, "timeout", 3600)
+    await bot.db.set_escalation_rule(42, 5, "ban", 604800)
+    regras = await bot.db.get_escalation_rules(42)
+    check("regras ordenadas por limiar", [r.threshold for r in regras] == [3, 5])
+    check("isola guilds", await bot.db.get_escalation_rules(43) == [])
+
+    await bot.db.set_escalation_rule(42, 3, "kick", None)
+    regras = await bot.db.get_escalation_rules(42)
+    check(
+        "redefinir substitui em vez de duplicar",
+        len(regras) == 2 and regras[0].action == "kick",
+        f"{len(regras)} regra(s), primeira={regras[0].action}",
+    )
+
+    check("dispara no limiar exato", rule_for_count(regras, 3) is not None)
+    check("NAO redispara acima do limiar", rule_for_count(regras, 4) is None)
+    check("nao dispara abaixo do limiar", rule_for_count(regras, 2) is None)
+
+    check("remove regra existente", await bot.db.delete_escalation_rule(42, 3))
+    check(
+        "remover inexistente devolve False",
+        not await bot.db.delete_escalation_rule(42, 99),
+    )
+
+    combinacoes = [
+        ("timeout", None, True),      # timeout exige duração
+        ("timeout", 3600, False),
+        ("timeout", 86400 * 40, True),  # acima do limite de 28 dias
+        ("kick", 3600, True),         # expulsão não tem duração
+        ("kick", None, False),
+        ("ban", None, False),         # ban sem duração = permanente
+        ("ban", 604800, False),
+        ("banimento", None, True),    # ação inexistente
+    ]
+    for acao, dur, deve_falhar in combinacoes:
+        try:
+            validate(acao, dur)
+            falhou = False
+        except ValueError:
+            falhou = True
+        check(f"validate({acao!r}, {dur})", falhou == deve_falhar)
+
+    print("\n[13] Backup do banco")
     import aiosqlite
 
     health = bot.get_cog("Health")
@@ -213,14 +272,22 @@ async def main() -> None:
     # O que importa não é o arquivo existir, e sim conter os dados: um backup
     # feito com cópia de arquivo sobre WAL passaria no teste acima e falharia
     # neste.
+    # Comparado com a origem, não com um número fixo: assim o teste não quebra
+    # quando outra seção passa a inserir casos.
+    cur = await bot.db.conn.execute("SELECT COUNT(*) AS n FROM cases")
+    esperado = (await cur.fetchone())["n"]
     async with aiosqlite.connect(destino) as copia:
         copia.row_factory = aiosqlite.Row
-        cur = await copia.execute("SELECT COUNT(*) AS n FROM cases WHERE guild_id = 42")
-        linha = await cur.fetchone()
-    check("backup contem os dados", linha["n"] == 2, f"{linha['n']} caso(s)")
+        cur = await copia.execute("SELECT COUNT(*) AS n FROM cases")
+        obtido = (await cur.fetchone())["n"]
+    check(
+        "backup contem os mesmos dados da origem",
+        obtido == esperado and esperado > 0,
+        f"{obtido} de {esperado} caso(s)",
+    )
     destino.unlink(missing_ok=True)
 
-    print("\n[13] Retencao de backups")
+    print("\n[14] Retencao de backups")
     bdir = settings.backup_dir
     bdir.mkdir(parents=True, exist_ok=True)
     for antigo in bdir.glob("zenibot-*.db"):
@@ -242,6 +309,44 @@ async def main() -> None:
     )
     for f in bdir.glob("zenibot-*.db"):
         f.unlink()
+
+    print("\n[15] Migracao sobre banco ja existente")
+    # O smoke test roda sempre em banco novo, então 001+002 aplicam juntas.
+    # Em produção a 002 cai sobre um banco que já tem dados — é esse caminho
+    # que quebra, e é ele que este bloco exercita.
+    from zenibot.core.db import MIGRATIONS_DIR, Database, to_db
+
+    legado = TMP_DB.parent / "zenibot_legado.db"
+    legado.unlink(missing_ok=True)
+    async with aiosqlite.connect(legado, isolation_level=None) as antigo_conn:
+        await antigo_conn.executescript(
+            (MIGRATIONS_DIR / "001_initial.sql").read_text(encoding="utf-8")
+        )
+        await antigo_conn.executescript(
+            "CREATE TABLE _migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL);"
+        )
+        await antigo_conn.execute(
+            "INSERT INTO _migrations VALUES ('001_initial.sql', ?)", (to_db(now()),)
+        )
+        await antigo_conn.execute(
+            "INSERT INTO cases (guild_id, case_number, user_id, moderator_id,"
+            " action, reason, created_at) VALUES (1, 1, 2, 3, 'warn', 'antigo', ?)",
+            (to_db(now()),),
+        )
+
+    legado_db = Database(legado)
+    await legado_db.connect()  # deve aplicar somente a 002
+    check(
+        "caso pre-existente sobrevive a migracao",
+        await legado_db.count_active_cases(1, 2) == 1,
+    )
+    check(
+        "linha antiga recebe automatic=0 e continua contando",
+        (await legado_db.get_user_cases(1, 2))[0].reason == "antigo",
+    )
+    check("tabela nova criada no banco antigo", await legado_db.get_escalation_rules(1) == [])
+    await legado_db.close()
+    legado.unlink(missing_ok=True)
 
     await bot.close()
     TMP_DB.unlink(missing_ok=True)

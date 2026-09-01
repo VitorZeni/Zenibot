@@ -17,6 +17,7 @@ Base arquitetural documentada em [GUIA-BOTS-DISCORD.md](GUIA-BOTS-DISCORD.md).
 | `cogs/scheduler.py` | Poller de jobs persistentes, `/lembrete`, desbanimento automático |
 | `cogs/selfroles.py` | `/painel criar`, `/painel adicionar`, `/painel remover` — botões persistentes de auto-atribuição de cargos |
 | `cogs/health.py` | Backup automático do banco, `/backup`, aviso de inicialização |
+| `cogs/escalation.py` | `/escalonamento ver`, `definir`, `remover` — punições automáticas por número de infrações |
 
 **Ainda não implementado** (ver "Próximos passos"): gestão de regras do AutoMod via comando, Guild Scheduled Events, anti-raid.
 
@@ -30,6 +31,20 @@ Base arquitetural documentada em [GUIA-BOTS-DISCORD.md](GUIA-BOTS-DISCORD.md).
 
 O `mensagem` aceita o ID ou o link completo da mensagem (botão direito >
 Copiar link da mensagem). Até 20 cargos por painel.
+
+### Escalonamento automático
+
+Monte a régua e o `/aviso` passa a aplicar a punição sozinho:
+
+```
+/escalonamento definir limite:3 acao:Timeout duracao:1h
+/escalonamento definir limite:5 acao:Banir duracao:7d
+/escalonamento ver
+```
+
+Conta infrações **ativas dos últimos 30 dias**. Se a hierarquia impedir a
+punição, o moderador é avisado na resposta do `/aviso` e nada fica registrado
+como se tivesse sido aplicado.
 
 ---
 
@@ -278,6 +293,14 @@ para qualquer membro. A checagem roda ao montar o painel **e de novo a cada
 clique**, porque as permissões de um cargo podem mudar depois. Quem cria o
 painel também não pode expor cargo igual ou acima do seu próprio.
 
+**Escalonamento dispara no limiar exato, e não se realimenta.** Duas decisões
+que evitam comportamento surpreendente: a regra da 3ª infração dispara na 3ª,
+não em toda infração a partir dela — com `>=`, o servidor aplicaria a mesma
+pena indefinidamente, que é o oposto de escalonar. E a punição gerada é
+gravada com `automatic = 1`, ficando fora da contagem: contá-la faria a
+punição da 3ª virar a 4ª infração, e a advertência seguinte cairia numa regra
+mais dura do que a merecida.
+
 **Backup usa a API online do SQLite, não cópia de arquivo.** Com WAL ativo,
 parte dos dados vive no `-wal`: um `cp` do `.db` com o bot rodando produz um
 snapshot incompleto que *parece* válido. `Connection.backup()` lê as páginas
@@ -321,8 +344,6 @@ tudo dentro de `core/db.py`:
 
 ## Próximos passos sugeridos
 
-- [ ] **Escalonamento automático de punições** — `db.count_active_cases()` já
-      existe; falta a tabela de regras por guild (1ª → aviso, 3ª → timeout 24h…)
 - [ ] **Logs via webhook** em vez de `channel.send()` — bucket de rate limit
       próprio, isolado do bucket do bot
 - [ ] **Anti-raid** — janela deslizante de entradas em `on_member_join`

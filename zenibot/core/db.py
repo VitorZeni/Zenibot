@@ -95,6 +95,23 @@ class Case:
 
 
 @dataclass(slots=True)
+class EscalationRule:
+    guild_id: int
+    threshold: int
+    action: str
+    duration_s: int | None
+
+    @classmethod
+    def from_row(cls, row: aiosqlite.Row) -> EscalationRule:
+        return cls(
+            guild_id=row["guild_id"],
+            threshold=row["threshold"],
+            action=row["action"],
+            duration_s=row["duration_s"],
+        )
+
+
+@dataclass(slots=True)
 class Job:
     id: int
     guild_id: int
@@ -266,8 +283,13 @@ class Database:
         action: str,
         reason: str,
         duration_s: int | None = None,
+        automatic: bool = False,
     ) -> int:
-        """Registra um caso e devolve o número sequencial dele na guild."""
+        """Registra um caso e devolve o número sequencial dele na guild.
+
+        `automatic=True` marca punições geradas pelo escalonamento: elas
+        ficam no histórico, mas não contam para o próximo limiar.
+        """
         await self.conn.execute("BEGIN IMMEDIATE")
         try:
             cursor = await self.conn.execute(
@@ -278,8 +300,8 @@ class Database:
             number = row["n"]
             await self.conn.execute(
                 "INSERT INTO cases (guild_id, case_number, user_id, moderator_id,"
-                " action, reason, duration_s, created_at)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                " action, reason, duration_s, automatic, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     guild_id,
                     number,
@@ -288,6 +310,7 @@ class Database:
                     action,
                     reason,
                     duration_s,
+                    int(automatic),
                     to_db(now()),
                 ),
             )
@@ -314,15 +337,52 @@ class Database:
         return [Case.from_row(row) for row in await cursor.fetchall()]
 
     async def count_active_cases(self, guild_id: int, user_id: int, within_days: int = 30) -> int:
-        """Infrações ativas na janela — base para escalonamento de punição."""
+        """Infrações ativas na janela — base para o escalonamento.
+
+        Exclui `automatic = 1`: a punição que o escalonamento aplicou não é
+        uma nova infração do usuário, e contá-la faria a régua andar sozinha.
+        """
         cutoff = to_db(now() - timedelta(days=within_days))
         cursor = await self.conn.execute(
             "SELECT COUNT(*) AS n FROM cases"
-            " WHERE guild_id = ? AND user_id = ? AND active = 1 AND created_at >= ?",
+            " WHERE guild_id = ? AND user_id = ? AND active = 1"
+            "   AND automatic = 0 AND created_at >= ?",
             (guild_id, user_id, cutoff),
         )
         row = await cursor.fetchone()
         return row["n"]
+
+    # ------------------------------------------------------------------
+    # Regras de escalonamento
+    # ------------------------------------------------------------------
+
+    async def get_escalation_rules(self, guild_id: int) -> list[EscalationRule]:
+        cursor = await self.conn.execute(
+            "SELECT * FROM escalation_rules WHERE guild_id = ? ORDER BY threshold",
+            (guild_id,),
+        )
+        return [EscalationRule.from_row(row) for row in await cursor.fetchall()]
+
+    async def set_escalation_rule(
+        self, guild_id: int, threshold: int, action: str, duration_s: int | None
+    ) -> None:
+        """Cria ou substitui a regra daquele limiar."""
+        await self.conn.execute(
+            "INSERT INTO escalation_rules (guild_id, threshold, action, duration_s,"
+            " created_at) VALUES (?, ?, ?, ?, ?)"
+            " ON CONFLICT (guild_id, threshold) DO UPDATE SET"
+            "   action = excluded.action, duration_s = excluded.duration_s",
+            (guild_id, threshold, action, duration_s, to_db(now())),
+        )
+        await self.conn.commit()
+
+    async def delete_escalation_rule(self, guild_id: int, threshold: int) -> bool:
+        cursor = await self.conn.execute(
+            "DELETE FROM escalation_rules WHERE guild_id = ? AND threshold = ?",
+            (guild_id, threshold),
+        )
+        await self.conn.commit()
+        return cursor.rowcount > 0
 
     # ------------------------------------------------------------------
     # Fila de agendamentos
