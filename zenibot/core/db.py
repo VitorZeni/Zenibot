@@ -153,6 +153,31 @@ class Database:
             await self._conn.close()
             self._conn = None
 
+    async def backup(self, destino: Path) -> int:
+        """Backup online consistente. Devolve o tamanho em bytes.
+
+        Copiar o arquivo .db com o bot rodando é corrupção esperando
+        acontecer: com WAL ativo, parte dos dados ainda vive no -wal e o
+        snapshot sairia incompleto. A API de backup do SQLite lê as páginas
+        sob lock, com o banco em uso.
+
+        A escrita vai para um .partial renomeado no fim: um backup
+        interrompido nunca deixa um .db truncado com cara de válido.
+        """
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        parcial = destino.with_suffix(".partial")
+        parcial.unlink(missing_ok=True)
+        try:
+            async with aiosqlite.connect(parcial) as alvo:
+                await self.conn.backup(alvo)
+            parcial.replace(destino)
+        finally:
+            parcial.unlink(missing_ok=True)
+        # ASYNC240 alerta sobre pathlib em corrotina, mas stat() é leitura de
+        # metadado (microssegundos). O trabalho pesado — copiar as páginas —
+        # já acontece na thread do aiosqlite.
+        return destino.stat().st_size  # noqa: ASYNC240
+
     async def migrate(self) -> None:
         """Aplica os .sql de migrations/ em ordem, uma única vez cada."""
         await self.conn.execute(

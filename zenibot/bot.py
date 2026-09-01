@@ -24,6 +24,7 @@ INITIAL_COGS = (
     "zenibot.cogs.logs",
     "zenibot.cogs.scheduler",
     "zenibot.cogs.selfroles",
+    "zenibot.cogs.health",
 )
 
 

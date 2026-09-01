@@ -66,7 +66,7 @@ async def main() -> None:
     await bot.__aenter__()
     await bot.setup_hook()
     cogs = sorted(bot.cogs)
-    check("6 cogs carregados", len(cogs) == 6, ", ".join(cogs))
+    check("7 cogs carregados", len(cogs) == 7, ", ".join(cogs))
 
     print("\n[4] Árvore de comandos")
     comandos = sorted(c.qualified_name for c in bot.tree.walk_commands())
@@ -78,6 +78,7 @@ async def main() -> None:
         "config", "config ver", "config canal", "config boas-vindas",
         "config autorole", "config idade-minima", "config staff",
         "painel", "painel criar", "painel adicionar", "painel remover",
+        "backup",
     }
     faltando = esperados - set(comandos)
     check(f"{len(comandos)} comandos registrados", not faltando, f"faltando: {faltando}")
@@ -188,6 +189,55 @@ async def main() -> None:
         botao.item.custom_id or "",
     )
     check("view persistente nao expira", discord.ui.View(timeout=None).timeout is None)
+
+    print("\n[12] Backup do banco")
+    import aiosqlite
+
+    health = bot.get_cog("Health")
+    # O cog inicia o loop de backup no __init__; paramos para o teste de poda
+    # não competir com uma execução automática.
+    health.backup_loop.cancel()
+
+    destino = TMP_DB.parent / "zenibot_bkp" / "zenibot-20260101-000000.db"
+    tamanho = await bot.db.backup(destino)
+    check("backup criado", destino.exists() and tamanho > 0, f"{tamanho} bytes")
+    check(
+        "nao deixa arquivo .partial para tras",
+        not destino.with_suffix(".partial").exists(),
+    )
+
+    # O que importa não é o arquivo existir, e sim conter os dados: um backup
+    # feito com cópia de arquivo sobre WAL passaria no teste acima e falharia
+    # neste.
+    async with aiosqlite.connect(destino) as copia:
+        copia.row_factory = aiosqlite.Row
+        cur = await copia.execute("SELECT COUNT(*) AS n FROM cases WHERE guild_id = 42")
+        linha = await cur.fetchone()
+    check("backup contem os dados", linha["n"] == 2, f"{linha['n']} caso(s)")
+    destino.unlink(missing_ok=True)
+
+    print("\n[13] Retencao de backups")
+    bdir = settings.backup_dir
+    bdir.mkdir(parents=True, exist_ok=True)
+    for antigo in bdir.glob("zenibot-*.db"):
+        antigo.unlink()
+    for i in range(10):
+        (bdir / f"zenibot-20260101-0000{i:02d}.db").write_bytes(b"x")
+
+    podados = health.prune()
+    restantes = sorted(p.name for p in bdir.glob("zenibot-*.db"))
+    check(
+        f"mantem apenas os {settings.backup_keep} mais novos",
+        len(restantes) == settings.backup_keep and podados == 3,
+        f"{len(restantes)} restantes, {podados} podados",
+    )
+    check(
+        "descarta os mais antigos, nao os recentes",
+        restantes[0] == "zenibot-20260101-000003.db",
+        restantes[0],
+    )
+    for f in bdir.glob("zenibot-*.db"):
+        f.unlink()
 
     await bot.close()
     TMP_DB.unlink(missing_ok=True)

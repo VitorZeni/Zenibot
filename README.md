@@ -16,6 +16,7 @@ Base arquitetural documentada em [GUIA-BOTS-DISCORD.md](GUIA-BOTS-DISCORD.md).
 | `cogs/logs.py` | `on_audit_log_entry_create`, `on_automod_action` → canal de logs |
 | `cogs/scheduler.py` | Poller de jobs persistentes, `/lembrete`, desbanimento automático |
 | `cogs/selfroles.py` | `/painel criar`, `/painel adicionar`, `/painel remover` — botões persistentes de auto-atribuição de cargos |
+| `cogs/health.py` | Backup automático do banco, `/backup`, aviso de inicialização |
 
 **Ainda não implementado** (ver "Próximos passos"): gestão de regras do AutoMod via comando, Guild Scheduled Events, anti-raid.
 
@@ -168,6 +169,35 @@ Detalhes que valem saber:
   não seriam encontradas. O estágio de build instala as dependências e depois
   desinstala o pacote.
 
+## Backup e monitoramento
+
+O banco é copiado automaticamente a cada `ZENIBOT_BACKUP_INTERVAL_HOURS`
+(padrão 24, `0` desativa), guardando os `ZENIBOT_BACKUP_KEEP` mais recentes
+(padrão 7). Os arquivos ficam em `data/backups/`, **ao lado do banco** — o que
+no Docker significa dentro do volume `zenibot-data`, e não perdidos no
+sistema de arquivos efêmero do container.
+
+Backup sob demanda (restrito aos donos):
+
+```
+/backup
+```
+
+Restaurar é copiar o arquivo por cima do banco com o bot parado:
+
+```bash
+docker compose down
+```
+
+```bash
+docker run --rm -v zenibot-data:/data alpine sh -c "cp /data/backups/zenibot-AAAAMMDD-HHMMSS.db /data/zenibot.db"
+```
+
+Ao subir, `ZENIBOT_STARTUP_NOTICE=true` (padrão) publica um aviso no canal de
+alertas — ou no de logs, se não houver — com versão, latência, tamanho do
+banco e política de backup. É o que faz uma queda silenciosa virar uma queda
+percebida: se o aviso parou de aparecer, algo está errado.
+
 ## Documentos legais
 
 - [Termos de Serviço](docs/termos-de-servico.md)
@@ -233,6 +263,14 @@ painel: um botão público que concede esses cargos é escalada de privilégio
 para qualquer membro. A checagem roda ao montar o painel **e de novo a cada
 clique**, porque as permissões de um cargo podem mudar depois. Quem cria o
 painel também não pode expor cargo igual ou acima do seu próprio.
+
+**Backup usa a API online do SQLite, não cópia de arquivo.** Com WAL ativo,
+parte dos dados vive no `-wal`: um `cp` do `.db` com o bot rodando produz um
+snapshot incompleto que *parece* válido. `Connection.backup()` lê as páginas
+sob lock, com o banco em uso. A escrita vai para um `.partial` renomeado no
+fim, então um backup interrompido nunca deixa um `.db` truncado. O loop
+também **não** espera o Gateway: se a API do Discord estiver fora, é
+justamente quando não se quer perder o backup do dia.
 
 **Falha de rede não derruba o processo.** O `discord.py` já reconecta sozinho
 depois de conectado, mas não cobre o `login()` inicial: sem DNS na partida, a

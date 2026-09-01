@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     db_path: Path = Path("data/zenibot.db")
     log_level: str = "INFO"
 
+    # Backup automático do banco. 0 desativa.
+    backup_interval_hours: int = 24
+    backup_keep: int = 7
+    # Aviso no canal de alertas quando o bot sobe.
+    startup_notice: bool = True
+
     @field_validator("owner_ids", mode="before")
     @classmethod
     def _parse_owner_ids(cls, v: object) -> object:
@@ -49,6 +55,11 @@ class Settings(BaseSettings):
         path = self.db_path if self.db_path.is_absolute() else ROOT / self.db_path
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
+
+    @property
+    def backup_dir(self) -> Path:
+        """Fica ao lado do banco, então segue o volume montado no Docker."""
+        return self.db_file.parent / "backups"
 
 
 def load_settings() -> Settings:
