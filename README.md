@@ -15,8 +15,20 @@ Base arquitetural documentada em [GUIA-BOTS-DISCORD.md](GUIA-BOTS-DISCORD.md).
 | `cogs/welcome.py` | `on_member_join` → triagem de conta nova, autorole, mensagem de boas-vindas |
 | `cogs/logs.py` | `on_audit_log_entry_create`, `on_automod_action` → canal de logs |
 | `cogs/scheduler.py` | Poller de jobs persistentes, `/lembrete`, desbanimento automático |
+| `cogs/selfroles.py` | `/painel criar`, `/painel adicionar`, `/painel remover` — botões persistentes de auto-atribuição de cargos |
 
-**Ainda não implementado** (ganchos prontos, ver "Próximos passos"): gestão de regras do AutoMod via comando, Guild Scheduled Events, painéis com botões persistentes.
+**Ainda não implementado** (ver "Próximos passos"): gestão de regras do AutoMod via comando, Guild Scheduled Events, anti-raid.
+
+### Painéis de self-roles
+
+```
+/painel criar canal:#cargos titulo:Escolha seus cargos
+/painel adicionar mensagem:<id> cargo:@Notificações emoji:🔔
+/painel remover mensagem:<id> cargo:@Notificações
+```
+
+O `mensagem` aceita o ID ou o link completo da mensagem (botão direito >
+Copiar link da mensagem). Até 20 cargos por painel.
 
 ---
 
@@ -208,6 +220,20 @@ IP pela Cloudflare.
 **Erros nunca vazam traceback.** Erro esperado vira mensagem clara; inesperado
 vira um ID de correlação de 8 caracteres que aparece no log do servidor.
 
+**Botões persistentes sem estado em memória.** Uma `View` comum morre no
+restart. Em vez de guardar cada painel no banco e re-registrar uma view por
+painel no boot, os self-roles usam `discord.ui.DynamicItem`: o botão se
+reconstrói a partir do próprio `custom_id` da mensagem (`srole:<role_id>`),
+casado por regex. Um único `add_dynamic_items()` faz qualquer painel, de
+qualquer época, voltar a responder — sem tabela e sem consulta na partida.
+
+**Self-roles nunca entregam poder.** Cargos com permissão administrativa
+(`administrator`, `manage_roles`, `ban_members` e mais 11) são recusados no
+painel: um botão público que concede esses cargos é escalada de privilégio
+para qualquer membro. A checagem roda ao montar o painel **e de novo a cada
+clique**, porque as permissões de um cargo podem mudar depois. Quem cria o
+painel também não pode expor cargo igual ou acima do seu próprio.
+
 **Falha de rede não derruba o processo.** O `discord.py` já reconecta sozinho
 depois de conectado, mas não cobre o `login()` inicial: sem DNS na partida, a
 exceção sobe e mata o bot. O supervisor em `__main__.py` fecha essa lacuna com
@@ -247,8 +273,6 @@ tudo dentro de `core/db.py`:
       existe; falta a tabela de regras por guild (1ª → aviso, 3ª → timeout 24h…)
 - [ ] **Logs via webhook** em vez de `channel.send()` — bucket de rate limit
       próprio, isolado do bucket do bot
-- [ ] **Painel de self-roles com botões persistentes** — `custom_id` no formato
-      `role:toggle:<id>` e `bot.add_view()` no `setup_hook` (o gancho já está lá)
 - [ ] **Anti-raid** — janela deslizante de entradas em `on_member_join`
 - [ ] **Gestão de regras do AutoMod** por slash command
 - [ ] **Guild Scheduled Events** — espelhar em banco e lembrar os interessados

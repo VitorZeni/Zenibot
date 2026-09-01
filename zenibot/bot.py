@@ -23,6 +23,7 @@ INITIAL_COGS = (
     "zenibot.cogs.welcome",
     "zenibot.cogs.logs",
     "zenibot.cogs.scheduler",
+    "zenibot.cogs.selfroles",
 )
 
 
@@ -69,9 +70,10 @@ class Zenibot(commands.Bot):
             except Exception:
                 log.exception("Falha ao carregar %s", cog)
 
-        # Views persistentes precisam ser re-registradas a cada boot, senão os
-        # botões de painéis antigos ficam mortos após um restart.
-        # Ex.: self.add_view(RolePicker())
+        # Componentes persistentes: o cog de selfroles registra seu
+        # DynamicItem no próprio setup(), então painéis antigos voltam a
+        # responder sem que este módulo precise conhecê-los.
+        # Views de layout fixo, se houver, iriam aqui com self.add_view().
 
         # NOTA: o registro de slash commands NÃO acontece aqui de propósito.
         # Sincronizar a cada boot desperdiça rate limit. Use scripts/sync.py

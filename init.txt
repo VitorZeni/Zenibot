@@ -1,0 +1,1 @@
+docker compose -f "D:\Documentos\Vitor\Projetos\Discord\Zenibot\docker-compose.yml" up -d --build

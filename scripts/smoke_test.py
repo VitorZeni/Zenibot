@@ -66,7 +66,7 @@ async def main() -> None:
     await bot.__aenter__()
     await bot.setup_hook()
     cogs = sorted(bot.cogs)
-    check("5 cogs carregados", len(cogs) == 5, ", ".join(cogs))
+    check("6 cogs carregados", len(cogs) == 6, ", ".join(cogs))
 
     print("\n[4] Árvore de comandos")
     comandos = sorted(c.qualified_name for c in bot.tree.walk_commands())
@@ -77,6 +77,7 @@ async def main() -> None:
         "ping", "sync", "reload", "lembrete",
         "config", "config ver", "config canal", "config boas-vindas",
         "config autorole", "config idade-minima", "config staff",
+        "painel", "painel criar", "painel adicionar", "painel remover",
     }
     faltando = esperados - set(comandos)
     check(f"{len(comandos)} comandos registrados", not faltando, f"faltando: {faltando}")
@@ -147,6 +148,46 @@ async def main() -> None:
     rec = logging.LogRecord("t", logging.INFO, "", 0, f"token={token_falso}", None, None)
     RedactSecrets().filter(rec)
     check("token filtrado do log", "REDACTED" in rec.msg, rec.msg)
+
+    print("\n[10] Self-roles: bloqueio de cargos perigosos")
+    from types import SimpleNamespace
+
+    import discord
+
+    from zenibot.cogs.selfroles import RoleToggleButton, dangerous_permissions
+
+    def cargo_falso(**perms):
+        return SimpleNamespace(permissions=discord.Permissions(**perms))
+
+    check(
+        "detecta administrator",
+        dangerous_permissions(cargo_falso(administrator=True)) == ["administrator"],
+    )
+    check(
+        "detecta varias permissoes de risco",
+        set(dangerous_permissions(cargo_falso(ban_members=True, manage_roles=True)))
+        == {"manage_roles", "ban_members"},
+    )
+    check(
+        "cargo cosmetico e liberado",
+        dangerous_permissions(cargo_falso(send_messages=True, view_channel=True)) == [],
+    )
+
+    print("\n[11] Self-roles: persistencia via custom_id")
+    template = RoleToggleButton.__discord_ui_compiled_template__
+    casou = template.fullmatch("srole:123456789012345678")
+    check(
+        "template casa um custom_id de painel",
+        casou is not None and casou["role_id"] == "123456789012345678",
+    )
+    check("template ignora outros componentes", template.fullmatch("outro:123") is None)
+    botao = RoleToggleButton(999, label="Notificações")
+    check(
+        "botao gera o custom_id esperado",
+        botao.item.custom_id == "srole:999",
+        botao.item.custom_id or "",
+    )
+    check("view persistente nao expira", discord.ui.View(timeout=None).timeout is None)
 
     await bot.close()
     TMP_DB.unlink(missing_ok=True)
