@@ -30,9 +30,14 @@ asyncio_mode = "auto"
 addopts = "-q --strict-markers"
 filterwarnings = [
     "error",
-    # discord.py 2.7 usa asyncio.iscoroutinefunction, depreciado no 3.14.
-    # Vem da biblioteca, não do projeto.
+    # Avisos emitidos pelo discord.py no import, fora do nosso controle.
+    # Sem estas exceções, "error" transforma um aviso de terceiros em falha
+    # de coleta e a suíte nem chega a rodar.
+    # Python 3.14: asyncio.iscoroutinefunction virou depreciado.
     "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning",
+    # Python 3.12: audioop depreciado (removido no 3.13, onde o discord.py
+    # passa a usar audioop-lts).
+    "ignore:'audioop' is deprecated:DeprecationWarning",
 ]
 
 # Explícito: sem isto o setuptools tenta empacotar migrations/ e scripts/

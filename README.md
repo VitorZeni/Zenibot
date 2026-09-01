@@ -399,6 +399,11 @@ pip install -e ".[dev]"
 pytest
 ```
 
+> Rode com o interpretador do venv. Se houver outro Python no PATH, um
+> `pytest` solto usa as dependências **dele** e falha na importação do
+> `discord`. Com o venv ativado, `pytest` já resolve certo; sem ativar, use
+> `& .\.venv\Scripts\python.exe -m pytest`.
+
 | Arquivo | Cobre |
 |---|---|
 | `tests/test_core.py` | Duração, redação de token no log, regras de escalonamento, janela anti-raid, segurança dos self-roles |
