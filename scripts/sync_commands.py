@@ -1,0 +1,80 @@
+"""Registra os slash commands no Discord.
+
+Deliberadamente separado do boot do bot: sincronizar a cada inicialização
+desperdiça rate limit sem necessidade, já que os comandos raramente mudam.
+
+    python scripts/sync_commands.py           # guild de dev (instantâneo)
+    python scripts/sync_commands.py --global  # produção (propagação lenta)
+    python scripts/sync_commands.py --clear   # remove os comandos da guild de dev
+
+Registro global pode levar até uma hora para propagar; registro por guild é
+imediato — por isso ZENIBOT_DEV_GUILD_ID existe.
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import discord  # noqa: E402
+
+from zenibot.bot import INITIAL_COGS, Zenibot  # noqa: E402
+from zenibot.config import load_settings  # noqa: E402
+from zenibot.core.logging_setup import setup_logging  # noqa: E402
+
+
+async def main(escopo_global: bool, limpar: bool) -> None:
+    settings = load_settings()
+    setup_logging(settings.log_level)
+
+    if not escopo_global and settings.dev_guild_id is None:
+        print(
+            "ZENIBOT_DEV_GUILD_ID não está definido no .env.\n"
+            "Defina-o para sincronizar numa guild, ou use --global.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+    bot = Zenibot(settings)
+
+    # Só precisamos da árvore de comandos montada — não do Gateway.
+    await bot.db.connect()
+    for cog in INITIAL_COGS:
+        await bot.load_extension(cog)
+
+    async with bot:
+        await bot.login(settings.token)
+
+        if escopo_global:
+            if limpar:
+                bot.tree.clear_commands(guild=None)
+            comandos = await bot.tree.sync()
+            print(f"{len(comandos)} comando(s) sincronizado(s) globalmente.")
+            print("A propagação global pode levar até 1 hora.")
+        else:
+            guild = discord.Object(id=settings.dev_guild_id)
+            if limpar:
+                bot.tree.clear_commands(guild=guild)
+            else:
+                bot.tree.copy_global_to(guild=guild)
+            comandos = await bot.tree.sync(guild=guild)
+            print(f"{len(comandos)} comando(s) sincronizado(s) na guild {settings.dev_guild_id}.")
+
+        for cmd in sorted(c.name for c in comandos):
+            print(f"  /{cmd}")
+
+    await bot.db.close()
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Sincroniza os slash commands do Zenibot")
+    parser.add_argument("--global", dest="escopo_global", action="store_true",
+                        help="registrar globalmente em vez de na guild de dev")
+    parser.add_argument("--clear", action="store_true",
+                        help="remover os comandos em vez de registrá-los")
+    args = parser.parse_args()
+    asyncio.run(main(args.escopo_global, args.clear))

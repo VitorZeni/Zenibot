@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zenibot"
+version = "0.1.0"
+description = "Bot de gerenciamento de servidor e eventos para Discord"
+requires-python = ">=3.11"
+dependencies = [
+    "discord.py>=2.7,<3",
+    "aiosqlite>=0.20",
+    "pydantic-settings>=2.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.6",
+]
+
+# Explícito: sem isto o setuptools tenta empacotar migrations/ e scripts/
+# como se fossem pacotes de topo.
+[tool.setuptools]
+packages = ["zenibot", "zenibot.cogs", "zenibot.core"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]

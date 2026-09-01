@@ -1,0 +1,30 @@
+# Segredos — NUNCA versionar
+.env
+*.env
+!.env.example
+
+# Banco de dados local
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.ruff_cache/
+.pytest_cache/
+
+# Logs
+*.log
+logs/
+
+# Editores / SO
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
