@@ -27,6 +27,7 @@ INITIAL_COGS = (
     "zenibot.cogs.health",
     "zenibot.cogs.escalation",
     "zenibot.cogs.antiraid",
+    "zenibot.cogs.builder",
 )
 
 

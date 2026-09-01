@@ -19,6 +19,7 @@ Base arquitetural documentada em [GUIA-BOTS-DISCORD.md](GUIA-BOTS-DISCORD.md).
 | `cogs/health.py` | Backup automático do banco, `/backup`, aviso de inicialização |
 | `cogs/escalation.py` | `/escalonamento ver`, `definir`, `remover` — punições automáticas por número de infrações |
 | `cogs/antiraid.py` | `/antiraid ver`, `configurar`, `liberar` — detecção de picos de entrada |
+| `cogs/builder.py` | `/embed criar` — painel interativo de criação de embeds |
 
 **Ainda não implementado** (ver "Próximos passos"): gestão de regras do AutoMod via comando, Guild Scheduled Events, anti-raid.
 
@@ -46,6 +47,24 @@ Monte a régua e o `/aviso` passa a aplicar a punição sozinho:
 Conta infrações **ativas dos últimos 30 dias**. Se a hierarquia impedir a
 punição, o moderador é avisado na resposta do `/aviso` e nada fica registrado
 como se tivesse sido aplicado.
+
+### Construtor de embeds
+
+```
+/embed criar
+```
+
+Abre um painel efêmero com prévia ao vivo: botões para **Conteúdo**,
+**Aparência** e **Rodapé**, um seletor de canal de destino, e **Publicar**.
+Os formulários já vêm preenchidos com o que você digitou antes, então ajustar
+não exige redigitar tudo.
+
+O contador de caracteres no topo avisa antes de estourar o limite de 6000 do
+Discord — que soma título, descrição, rodapé e autor, não só o texto.
+
+> O rascunho vive **apenas em memória**, com timeout de 15 minutos. É o oposto
+> dos painéis de self-role: um rascunho que sobrevivesse a um deploy seria
+> lixo acumulado, não funcionalidade.
 
 ### Anti-raid
 

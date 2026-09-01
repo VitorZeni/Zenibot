@@ -77,6 +77,7 @@ async def test_arvore_de_comandos(bot: Zenibot) -> None:
         "painel criar", "painel adicionar", "painel remover",
         "escalonamento ver", "escalonamento definir", "escalonamento remover",
         "antiraid ver", "antiraid configurar", "antiraid liberar",
+        "embed criar",
     }
     assert esperados <= comandos
 
