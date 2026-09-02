@@ -60,6 +60,7 @@ class GuildConfig:
     voice_category_id: int | None = None
     voice_user_limit: int = 0
     voice_max_channels: int = 20
+    ticket_category_id: int | None = None
 
     @classmethod
     def from_row(cls, row: aiosqlite.Row) -> GuildConfig:
@@ -80,6 +81,7 @@ class GuildConfig:
             voice_category_id=row["voice_category_id"],
             voice_user_limit=row["voice_user_limit"],
             voice_max_channels=row["voice_max_channels"],
+            ticket_category_id=row["ticket_category_id"],
         )
 
 
@@ -124,6 +126,33 @@ class EscalationRule:
             threshold=row["threshold"],
             action=row["action"],
             duration_s=row["duration_s"],
+        )
+
+
+@dataclass(slots=True)
+class Ticket:
+    id: int
+    guild_id: int
+    numero: int
+    channel_id: int | None
+    opener_id: int
+    claimed_by: int | None
+    assunto: str
+    status: str
+    created_at: datetime
+
+    @classmethod
+    def from_row(cls, row: aiosqlite.Row) -> Ticket:
+        return cls(
+            id=row["id"],
+            guild_id=row["guild_id"],
+            numero=row["numero"],
+            channel_id=row["channel_id"],
+            opener_id=row["opener_id"],
+            claimed_by=row["claimed_by"],
+            assunto=row["assunto"],
+            status=row["status"],
+            created_at=from_db(row["created_at"]),
         )
 
 
@@ -291,6 +320,7 @@ class Database:
             "voice_category_id",
             "voice_user_limit",
             "voice_max_channels",
+            "ticket_category_id",
         }
         unknown = set(fields) - allowed
         if unknown:
@@ -426,6 +456,107 @@ class Database:
         )
         await self.conn.commit()
         return cursor.rowcount > 0
+
+    # ------------------------------------------------------------------
+    # Tickets
+    # ------------------------------------------------------------------
+
+    async def open_ticket(
+        self, *, guild_id: int, opener_id: int, assunto: str
+    ) -> tuple[int, int]:
+        """Reserva o número e cria a linha. Devolve (id interno, número).
+
+        A linha nasce sem channel_id: o número precisa ser reservado antes de
+        criar o canal, porque ele entra no nome do canal.
+        """
+        await self.conn.execute("BEGIN IMMEDIATE")
+        try:
+            cursor = await self.conn.execute(
+                "SELECT COALESCE(MAX(numero), 0) + 1 AS n FROM tickets WHERE guild_id = ?",
+                (guild_id,),
+            )
+            numero = (await cursor.fetchone())["n"]
+            cursor = await self.conn.execute(
+                "INSERT INTO tickets (guild_id, numero, opener_id, assunto, created_at)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (guild_id, numero, opener_id, assunto, to_db(now())),
+            )
+            ticket_id = cursor.lastrowid or 0
+            await self.conn.commit()
+        except Exception:
+            await self.conn.rollback()
+            raise
+        return ticket_id, numero
+
+    async def set_ticket_channel(self, ticket_id: int, channel_id: int) -> None:
+        await self.conn.execute(
+            "UPDATE tickets SET channel_id = ? WHERE id = ?", (channel_id, ticket_id)
+        )
+        await self.conn.commit()
+
+    async def drop_ticket(self, ticket_id: int) -> None:
+        """Descarta a linha quando a criação do canal falhou."""
+        await self.conn.execute("DELETE FROM tickets WHERE id = ?", (ticket_id,))
+        await self.conn.commit()
+
+    async def get_ticket(self, ticket_id: int) -> Ticket | None:
+        cursor = await self.conn.execute(
+            "SELECT * FROM tickets WHERE id = ?", (ticket_id,)
+        )
+        row = await cursor.fetchone()
+        return Ticket.from_row(row) if row else None
+
+    async def ticket_by_channel(self, channel_id: int) -> Ticket | None:
+        cursor = await self.conn.execute(
+            "SELECT * FROM tickets WHERE channel_id = ?", (channel_id,)
+        )
+        row = await cursor.fetchone()
+        return Ticket.from_row(row) if row else None
+
+    async def open_ticket_of(self, guild_id: int, opener_id: int) -> Ticket | None:
+        """Ticket aberto da pessoa, se houver.
+
+        É a trava contra clique repetido no painel encher o servidor de canais.
+        """
+        cursor = await self.conn.execute(
+            "SELECT * FROM tickets WHERE guild_id = ? AND opener_id = ?"
+            "   AND status = 'aberto' LIMIT 1",
+            (guild_id, opener_id),
+        )
+        row = await cursor.fetchone()
+        return Ticket.from_row(row) if row else None
+
+    async def claim_ticket(self, ticket_id: int, staff_id: int) -> bool:
+        """Só reivindica se ninguém tiver assumido antes."""
+        cursor = await self.conn.execute(
+            "UPDATE tickets SET claimed_by = ? WHERE id = ? AND claimed_by IS NULL",
+            (staff_id, ticket_id),
+        )
+        await self.conn.commit()
+        return cursor.rowcount > 0
+
+    async def close_ticket(self, ticket_id: int) -> bool:
+        cursor = await self.conn.execute(
+            "UPDATE tickets SET status = 'fechado', closed_at = ?"
+            " WHERE id = ? AND status = 'aberto'",
+            (to_db(now()), ticket_id),
+        )
+        await self.conn.commit()
+        return cursor.rowcount > 0
+
+    async def forget_ticket_channel(self, ticket_id: int) -> None:
+        """O canal foi apagado, mas o histórico do ticket permanece."""
+        await self.conn.execute(
+            "UPDATE tickets SET channel_id = NULL WHERE id = ?", (ticket_id,)
+        )
+        await self.conn.commit()
+
+    async def count_open_tickets(self, guild_id: int) -> int:
+        cursor = await self.conn.execute(
+            "SELECT COUNT(*) AS n FROM tickets WHERE guild_id = ? AND status = 'aberto'",
+            (guild_id,),
+        )
+        return (await cursor.fetchone())["n"]
 
     # ------------------------------------------------------------------
     # Canais de voz temporários

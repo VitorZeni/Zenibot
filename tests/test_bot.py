@@ -86,6 +86,7 @@ async def test_arvore_de_comandos(bot: Zenibot) -> None:
         "embed criar", "container criar",
         "modelo listar", "modelo usar", "modelo aplicar", "modelo apagar",
         "voz ver", "voz configurar", "voz desativar",
+        "ticket configurar", "ticket painel", "ticket status",
     }
     assert esperados <= comandos
 

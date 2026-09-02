@@ -23,6 +23,7 @@ Base arquitetural documentada em [GUIA-BOTS-DISCORD.md](GUIA-BOTS-DISCORD.md).
 | `cogs/containers.py` | `/container criar` — painel de containers (Components V2) |
 | `cogs/templates.py` | `/modelo listar`, `usar`, `aplicar`, `apagar` — modelos de mensagem salvos |
 | `cogs/tempvoice.py` | `/voz configurar`, `ver`, `desativar` — canais de voz temporários |
+| `cogs/tickets.py` | `/ticket configurar`, `painel`, `status` — atendimento por canal privado |
 
 **Ainda não implementado** (ver "Próximos passos"): gestão de regras do AutoMod via comando, Guild Scheduled Events, anti-raid.
 
@@ -82,6 +83,25 @@ miniatura à direita), **Separador** e **Imagem**. Mais **Cor** da faixa,
 
 O painel mostra quantos componentes ainda cabem. Botões cujo bloco não caberia
 mais aparecem desabilitados, em vez de falhar no Publicar.
+
+### Tickets
+
+```
+/config staff cargo:@Moderador
+/ticket configurar categoria:Atendimento
+/ticket painel canal:#suporte
+```
+
+O painel publica um botão **Abrir ticket**. Cada clique pede o assunto e cria
+um canal privado entre a pessoa e os cargos de staff. Dentro dele: **Assumir**,
+**Fechar** e, depois de fechado, **Apagar canal**.
+
+Configure os cargos de staff **antes** — sem eles, só quem tem Gerenciar
+Servidor enxerga os tickets, e o `/ticket configurar` avisa disso.
+
+Fechar não apaga: revoga o acesso de quem abriu e mantém o canal para a equipe
+reler. O registro do ticket sobrevive ao canal apagado, então o histórico não
+some junto.
 
 ### Voz temporária
 
@@ -400,6 +420,12 @@ painel: um botão público que concede esses cargos é escalada de privilégio
 para qualquer membro. A checagem roda ao montar o painel **e de novo a cada
 clique**, porque as permissões de um cargo podem mudar depois. Quem cria o
 painel também não pode expor cargo igual ou acima do seu próprio.
+
+**Um ticket aberto por pessoa, e assumir é atômico.** Sem a primeira trava,
+clique repetido no painel encheria o servidor de canais — e o teto do Discord
+é 500. A segunda resolve dois membros da equipe clicando em "Assumir" ao mesmo
+tempo: o `UPDATE` só vale se ninguém tiver assumido antes, então o banco
+decide o vencedor em vez de a última escrita ganhar.
 
 **Canal temporário só é apagado por evento de saída.** Entre criar o canal e
 mover a pessoa para dentro existe uma janela em que ele está legitimamente
