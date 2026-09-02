@@ -602,9 +602,8 @@ tudo dentro de `core/db.py`:
       próprio, isolado do bucket do bot
 - [ ] **Gestão de regras do AutoMod** por slash command
 - [ ] **Guild Scheduled Events** — espelhar em banco e lembrar os interessados
-- [ ] **Cobrir os slash commands** com os mesmos dublês de `tests/fakes.py`.
-      Os callbacks de botão já estão cobertos; falta o corpo dos comandos,
-      que hoje só é exercitado no servidor.
+- [ ] **Migrar para PostgreSQL** — só quando o bot passar de ~2.500 servidores
+      ou de um processo. O README traz os 5 pontos que mudam.
 
 ---
 
@@ -636,6 +635,7 @@ pytest
 | `tests/test_supervise.py` | Reconexão com backoff e os erros que **não** devem ser repetidos |
 | `tests/test_integration.py` | Eventos de Gateway numa guild falsa (dpytest): boas-vindas, triagem, anti-raid |
 | `tests/test_interactions.py` | Callbacks de botão com banco real e Discord falso (`tests/fakes.py`) |
+| `tests/test_commands.py` | Corpo dos slash commands: moderação, escalonamento, banimento temporário |
 
 Para validar uma **imagem Docker** — onde a suíte não existe, por ser
 dependência de desenvolvimento — use a verificação de deploy:

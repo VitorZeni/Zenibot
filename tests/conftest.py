@@ -67,9 +67,15 @@ async def dbot(settings: Settings) -> Zenibot:
 @pytest_asyncio.fixture
 async def bot(settings: Settings) -> Zenibot:
     """Bot com cogs carregados, sem Gateway e sem tarefas de fundo."""
+    from tests.fakes import FakeMember
+
     instancia = Zenibot(settings, background_tasks=False)
     await instancia.__aenter__()
     await instancia.setup_hook()
+    # Sem login, `bot.user` é None. Vários caminhos de produção o usam para o
+    # bot se identificar — autor de um caso automático, "essa mensagem não foi
+    # enviada por mim" — e estourariam antes de chegar ao que se quer testar.
+    instancia._connection.user = FakeMember(999, "Zenibot")
     try:
         yield instancia
     finally:

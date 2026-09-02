@@ -18,6 +18,17 @@ from __future__ import annotations
 import discord
 
 
+class _Avatar:
+    url = "https://cdn.discordapp.com/avatar.png"
+
+
+class _Resposta:
+    """Mínimo que `discord.Forbidden` exige para ser construído."""
+
+    status = 403
+    reason = "Forbidden"
+
+
 class FakeRole:
     """Cargo com posição, para as checagens de hierarquia funcionarem."""
 
@@ -73,16 +84,38 @@ class FakeMember:
         id: int = 100,
         name: str = "membro",
         roles: list[FakeRole] | None = None,
+        *,
+        dm_fechada: bool = False,
         **perms,
     ) -> None:
         self.id = id
         self.name = name
+        self.dm_fechada = dm_fechada
         self.mention = f"<@{id}>"
         self.roles = roles or []
         self.guild_permissions = discord.Permissions(**perms)
         self.guild: FakeGuild | None = None
         self.concedidos: list[FakeRole] = []
         self.removidos: list[FakeRole] = []
+        # Registro das ações de moderação sofridas, para os testes olharem.
+        self.dms: list[dict] = []
+        self.silenciado: tuple | None = None
+        self.expulso: str | None = None
+        self.display_avatar = _Avatar()
+        self.bot = False
+
+    async def send(self, content=None, **kwargs):
+        """DM. Em produção pode falhar com DMs fechadas — ver `dm_fechada`."""
+        if self.dm_fechada:
+            raise discord.Forbidden(_Resposta(), "cannot send to this user")
+        self.dms.append({"content": content, **kwargs})
+        return FakeMessage()
+
+    async def timeout(self, ate, *, reason: str | None = None) -> None:
+        self.silenciado = (ate, reason)
+
+    async def kick(self, *, reason: str | None = None) -> None:
+        self.expulso = reason
 
     @property
     def top_role(self) -> FakeRole:
@@ -159,9 +192,26 @@ class FakeGuild:
         self._canais = {c.id: c for c in (canais or [])}
         for canal in self._canais.values():
             canal.guild = self
+        self._membros: dict[int, FakeMember] = {}
+        self.banidos: list[tuple] = []
+        self.desbanidos: list[int] = []
+
+    async def ban(self, alvo, *, reason=None, delete_message_seconds=0) -> None:
+        self.banidos.append((alvo, reason, delete_message_seconds))
+
+    async def unban(self, alvo, *, reason=None) -> None:
+        self.desbanidos.append(getattr(alvo, "id", alvo))
 
     def get_role(self, role_id: int) -> FakeRole | None:
         return self._roles.get(role_id)
+
+    def get_member(self, membro_id: int) -> FakeMember | None:
+        return self._membros.get(membro_id)
+
+    def adiciona_membro(self, membro: FakeMember) -> FakeMember:
+        membro.guild = self
+        self._membros[membro.id] = membro
+        return membro
 
     def get_channel(self, canal_id: int) -> FakeChannel | None:
         return self._canais.get(canal_id)
