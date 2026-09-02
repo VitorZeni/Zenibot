@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 
 import aiosqlite
@@ -92,6 +93,35 @@ async def test_punicao_automatica_nao_conta_para_o_limiar(db: Database) -> None:
 
     assert await db.count_active_cases(42, 1) == 2
     assert len(await db.get_user_cases(42, 1)) == 3  # mas segue auditável
+
+
+async def test_transacoes_concorrentes_nao_colidem(db: Database) -> None:
+    """Regressão: as corrotinas compartilham uma conexão, e há `await` entre
+    o BEGIN e o COMMIT. Sem serializar, a segunda transação estourava
+    "cannot start a transaction within a transaction" — o que na prática
+    significava erro interno para quem clicasse ao mesmo tempo que outro.
+    """
+    numeros = await asyncio.gather(
+        *(
+            db.add_case(
+                guild_id=42, user_id=i, moderator_id=1, action="warn", reason="x"
+            )
+            for i in range(20)
+        )
+    )
+    # Numeração sequencial sem buracos nem repetição, mesmo em paralelo.
+    assert sorted(numeros) == list(range(1, 21))
+
+
+async def test_tickets_concorrentes_nao_repetem_numero(db: Database) -> None:
+    resultados = await asyncio.gather(
+        *(
+            db.open_ticket(guild_id=42, opener_id=i, assunto="x")
+            for i in range(10)
+        )
+    )
+    numeros = [numero for _id, numero in resultados]
+    assert sorted(numeros) == list(range(1, 11))
 
 
 async def test_contagem_respeita_a_janela(db: Database) -> None:

@@ -11,8 +11,10 @@ grave que um bot multi-guild pode ter.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -130,6 +132,35 @@ class EscalationRule:
 
 
 @dataclass(slots=True)
+class Party:
+    id: int
+    guild_id: int
+    channel_id: int | None
+    message_id: int | None
+    owner_id: int
+    titulo: str
+    descricao: str
+    inicio: datetime | None
+    event_id: int | None
+    status: str
+
+    @classmethod
+    def from_row(cls, row: aiosqlite.Row) -> Party:
+        return cls(
+            id=row["id"],
+            guild_id=row["guild_id"],
+            channel_id=row["channel_id"],
+            message_id=row["message_id"],
+            owner_id=row["owner_id"],
+            titulo=row["titulo"],
+            descricao=row["descricao"],
+            inicio=from_db(row["inicio"]) if row["inicio"] else None,
+            event_id=row["event_id"],
+            status=row["status"],
+        )
+
+
+@dataclass(slots=True)
 class Ticket:
     id: int
     guild_id: int
@@ -206,6 +237,12 @@ class Database:
     def __init__(self, path: Path) -> None:
         self._path = path
         self._conn: aiosqlite.Connection | None = None
+        # Todas as corrotinas compartilham uma conexão. Como há `await` entre
+        # o BEGIN e o COMMIT, duas transações concorrentes colidiriam com
+        # "cannot start a transaction within a transaction" — o SQLite não
+        # aninha. O lock serializa só os blocos transacionais; leituras e
+        # escritas avulsas seguem livres.
+        self._tx = asyncio.Lock()
 
     @property
     def conn(self) -> aiosqlite.Connection:
@@ -258,6 +295,21 @@ class Database:
         # metadado (microssegundos). O trabalho pesado — copiar as páginas —
         # já acontece na thread do aiosqlite.
         return destino.stat().st_size  # noqa: ASYNC240
+
+    @asynccontextmanager
+    async def transacao(self):
+        """Transação explícita, serializada entre corrotinas.
+
+        Commita ao sair sem erro; desfaz e repropaga se algo estourar.
+        """
+        async with self._tx:
+            await self.conn.execute("BEGIN IMMEDIATE")
+            try:
+                yield
+            except BaseException:
+                await self.conn.rollback()
+                raise
+            await self.conn.commit()
 
     async def migrate(self) -> None:
         """Aplica os .sql de migrations/ em ordem, uma única vez cada."""
@@ -363,14 +415,12 @@ class Database:
         `automatic=True` marca punições geradas pelo escalonamento: elas
         ficam no histórico, mas não contam para o próximo limiar.
         """
-        await self.conn.execute("BEGIN IMMEDIATE")
-        try:
+        async with self.transacao():
             cursor = await self.conn.execute(
                 "SELECT COALESCE(MAX(case_number), 0) + 1 AS n FROM cases WHERE guild_id = ?",
                 (guild_id,),
             )
-            row = await cursor.fetchone()
-            number = row["n"]
+            number = (await cursor.fetchone())["n"]
             await self.conn.execute(
                 "INSERT INTO cases (guild_id, case_number, user_id, moderator_id,"
                 " action, reason, duration_s, automatic, created_at)"
@@ -387,10 +437,6 @@ class Database:
                     to_db(now()),
                 ),
             )
-            await self.conn.commit()
-        except Exception:
-            await self.conn.rollback()
-            raise
         return number
 
     async def get_case(self, guild_id: int, case_number: int) -> Case | None:
@@ -458,6 +504,169 @@ class Database:
         return cursor.rowcount > 0
 
     # ------------------------------------------------------------------
+    # Parties
+    # ------------------------------------------------------------------
+
+    async def create_party(
+        self,
+        *,
+        guild_id: int,
+        owner_id: int,
+        titulo: str,
+        descricao: str,
+        inicio: datetime | None,
+        vagas: dict[str, int],
+    ) -> int:
+        async with self.transacao():
+            cursor = await self.conn.execute(
+                "INSERT INTO parties (guild_id, owner_id, titulo, descricao,"
+                " inicio, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    guild_id,
+                    owner_id,
+                    titulo,
+                    descricao,
+                    to_db(inicio) if inicio else None,
+                    to_db(now()),
+                ),
+            )
+            party_id = cursor.lastrowid or 0
+            for funcao, capacidade in vagas.items():
+                await self.conn.execute(
+                    "INSERT INTO party_slots (party_id, funcao, capacidade)"
+                    " VALUES (?, ?, ?)",
+                    (party_id, funcao, capacidade),
+                )
+        return party_id
+
+    async def set_party_message(
+        self, party_id: int, channel_id: int, message_id: int
+    ) -> None:
+        await self.conn.execute(
+            "UPDATE parties SET channel_id = ?, message_id = ? WHERE id = ?",
+            (channel_id, message_id, party_id),
+        )
+        await self.conn.commit()
+
+    async def set_party_event(self, party_id: int, event_id: int) -> None:
+        await self.conn.execute(
+            "UPDATE parties SET event_id = ? WHERE id = ?", (event_id, party_id)
+        )
+        await self.conn.commit()
+
+    async def drop_party(self, party_id: int) -> None:
+        """Descarta uma party cuja mensagem não chegou a ser publicada."""
+        await self.conn.execute("DELETE FROM party_slots WHERE party_id = ?", (party_id,))
+        await self.conn.execute("DELETE FROM parties WHERE id = ?", (party_id,))
+        await self.conn.commit()
+
+    async def get_party(self, party_id: int) -> Party | None:
+        cursor = await self.conn.execute(
+            "SELECT * FROM parties WHERE id = ?", (party_id,)
+        )
+        row = await cursor.fetchone()
+        return Party.from_row(row) if row else None
+
+    async def party_slots(self, party_id: int) -> list[tuple[str, int]]:
+        cursor = await self.conn.execute(
+            "SELECT funcao, capacidade FROM party_slots WHERE party_id = ?",
+            (party_id,),
+        )
+        return [(r["funcao"], r["capacidade"]) for r in await cursor.fetchall()]
+
+    async def party_members(self, party_id: int) -> list[tuple[int, str]]:
+        cursor = await self.conn.execute(
+            "SELECT user_id, funcao FROM party_members WHERE party_id = ?"
+            " ORDER BY entrou_em",
+            (party_id,),
+        )
+        return [(r["user_id"], r["funcao"]) for r in await cursor.fetchall()]
+
+    async def party_role_of(self, party_id: int, user_id: int) -> str | None:
+        cursor = await self.conn.execute(
+            "SELECT funcao FROM party_members WHERE party_id = ? AND user_id = ?",
+            (party_id, user_id),
+        )
+        row = await cursor.fetchone()
+        return row["funcao"] if row else None
+
+    async def _inserir_se_couber(
+        self, party_id: int, user_id: int, funcao: str
+    ) -> bool:
+        """INSERT condicional: a contagem e o limite são avaliados dentro da
+        mesma instrução, então dois cliques simultâneos na última vaga não
+        podem passar os dois."""
+        cursor = await self.conn.execute(
+            "INSERT INTO party_members (party_id, user_id, funcao, entrou_em)"
+            " SELECT ?, ?, ?, ?"
+            " WHERE (SELECT COUNT(*) FROM party_members"
+            "        WHERE party_id = ? AND funcao = ?)"
+            "     < (SELECT COALESCE(capacidade, 0) FROM party_slots"
+            "        WHERE party_id = ? AND funcao = ?)",
+            (
+                party_id, user_id, funcao, to_db(now()),
+                party_id, funcao,
+                party_id, funcao,
+            ),
+        )
+        return cursor.rowcount == 1
+
+    async def join_party(self, party_id: int, user_id: int, funcao: str) -> str:
+        """Devolve 'entrou', 'trocou', 'saiu' ou 'cheia'.
+
+        Clicar na função em que já se está significa sair. Clicar em outra
+        significa trocar — e se a nova estiver cheia, a troca é desfeita para
+        não custar a vaga que a pessoa já tinha.
+        """
+        async with self._tx:
+            await self.conn.execute("BEGIN IMMEDIATE")
+            try:
+                atual = await self.party_role_of(party_id, user_id)
+
+                if atual == funcao:
+                    await self.conn.execute(
+                        "DELETE FROM party_members WHERE party_id = ? AND user_id = ?",
+                        (party_id, user_id),
+                    )
+                    await self.conn.commit()
+                    return "saiu"
+
+                if atual is not None:
+                    await self.conn.execute(
+                        "DELETE FROM party_members WHERE party_id = ? AND user_id = ?",
+                        (party_id, user_id),
+                    )
+
+                if not await self._inserir_se_couber(party_id, user_id, funcao):
+                    # Rollback devolve a vaga anterior: tentar trocar para uma
+                    # função cheia não pode deixar a pessoa sem nada.
+                    await self.conn.rollback()
+                    return "cheia"
+
+                await self.conn.commit()
+                return "trocou" if atual else "entrou"
+            except BaseException:
+                await self.conn.rollback()
+                raise
+
+    async def leave_party(self, party_id: int, user_id: int) -> bool:
+        cursor = await self.conn.execute(
+            "DELETE FROM party_members WHERE party_id = ? AND user_id = ?",
+            (party_id, user_id),
+        )
+        await self.conn.commit()
+        return cursor.rowcount > 0
+
+    async def close_party(self, party_id: int) -> bool:
+        cursor = await self.conn.execute(
+            "UPDATE parties SET status = 'encerrada'"
+            " WHERE id = ? AND status = 'aberta'",
+            (party_id,),
+        )
+        await self.conn.commit()
+        return cursor.rowcount > 0
+
+    # ------------------------------------------------------------------
     # Tickets
     # ------------------------------------------------------------------
 
@@ -469,8 +678,7 @@ class Database:
         A linha nasce sem channel_id: o número precisa ser reservado antes de
         criar o canal, porque ele entra no nome do canal.
         """
-        await self.conn.execute("BEGIN IMMEDIATE")
-        try:
+        async with self.transacao():
             cursor = await self.conn.execute(
                 "SELECT COALESCE(MAX(numero), 0) + 1 AS n FROM tickets WHERE guild_id = ?",
                 (guild_id,),
@@ -482,10 +690,6 @@ class Database:
                 (guild_id, numero, opener_id, assunto, to_db(now())),
             )
             ticket_id = cursor.lastrowid or 0
-            await self.conn.commit()
-        except Exception:
-            await self.conn.rollback()
-            raise
         return ticket_id, numero
 
     async def set_ticket_channel(self, ticket_id: int, channel_id: int) -> None:

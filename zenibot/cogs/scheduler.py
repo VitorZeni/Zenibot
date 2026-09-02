@@ -33,6 +33,7 @@ class Scheduler(commands.Cog):
             "reminder": self.run_reminder,
             "unban": self.run_unban,
             "raid_end": self.run_raid_end,
+            "party_reminder": self.run_party_reminder,
         }
         if bot.background_tasks:
             self.process_jobs.start()
@@ -136,6 +137,50 @@ class Scheduler(commands.Cog):
             log.warning("Guild %s inacessível; bloqueio não liberado", job.guild_id)
             return
         await antiraid.lift_lockdown(guild, job.payload)
+
+    async def run_party_reminder(self, job: Job) -> None:
+        """Avisa os inscritos pouco antes do horário do grupo.
+
+        Só precisou de um handler novo: a fila, o backoff e a persistência já
+        existiam para lembretes e desbanimentos.
+        """
+        grupo = await self.bot.db.get_party(job.payload.get("party", 0))
+        if grupo is None or grupo.status != "aberta":
+            return  # encerrado ou apagado no meio do caminho
+
+        canal = self.bot.get_channel(job.channel_id) if job.channel_id else None
+        if canal is None:
+            log.warning("Canal do grupo %s indisponível", grupo.id)
+            return
+
+        inscritos = [uid for uid, _ in await self.bot.db.party_members(grupo.id)]
+        if not inscritos:
+            return
+
+        link = ""
+        if grupo.channel_id and grupo.message_id:
+            link = (
+                f"\nhttps://discord.com/channels/{grupo.guild_id}"
+                f"/{grupo.channel_id}/{grupo.message_id}"
+            )
+
+        embed = embeds.warn(
+            f"**{grupo.titulo}** começa "
+            f"{embeds.timestamp(grupo.inicio, 'R')}.{link}",
+            title="Lembrete de grupo",
+        )
+        try:
+            await canal.send(
+                content=" ".join(f"<@{uid}>" for uid in inscritos),
+                embed=embed,
+                # Mencionar aqui é o ponto do lembrete; a lista vem do banco,
+                # não de texto digitado por alguém.
+                allowed_mentions=discord.AllowedMentions(
+                    users=[discord.Object(id=uid) for uid in inscritos]
+                ),
+            )
+        except discord.HTTPException:
+            log.warning("Falha ao lembrar do grupo %s", grupo.id)
 
     # ------------------------------------------------------------------
     # Comandos

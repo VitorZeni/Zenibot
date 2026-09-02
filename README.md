@@ -25,6 +25,7 @@ Base arquitetural documentada em [GUIA-BOTS-DISCORD.md](GUIA-BOTS-DISCORD.md).
 | `cogs/tempvoice.py` | `/voz configurar`, `ver`, `desativar` — canais de voz temporários |
 | `cogs/tickets.py` | `/ticket configurar`, `painel`, `status` — atendimento por canal privado |
 | `cogs/channels.py` | `/canal criar`, `acesso` — canais visíveis só para certos cargos |
+| `cogs/party.py` | `/grupo criar` — montagem de grupo com vagas por função |
 
 **Ainda não implementado** (ver "Próximos passos"): gestão de regras do AutoMod via comando, Guild Scheduled Events, anti-raid.
 
@@ -88,6 +89,24 @@ miniatura à direita), **Separador** e **Imagem**. Mais **Cor** da faixa,
 
 O painel mostra quantos componentes ainda cabem. Botões cujo bloco não caberia
 mais aparecem desabilitados, em vez de falhar no Publicar.
+
+### Grupos e raides
+
+```
+/grupo criar titulo:Raide de sexta tank:2 suporte:2 dano:6 quando:3h evento:true
+```
+
+Publica um painel com um botão por função. Clicar entra; clicar de novo sai;
+clicar em outra função troca. O painel se redesenha a cada mudança e anuncia
+quando o grupo fica completo.
+
+Com `quando`, os inscritos são lembrados **15 minutos antes** — pela mesma
+fila persistente dos lembretes e desbanimentos, então o aviso sobrevive a um
+restart. Com `evento:true`, cria também um **Evento Agendado do servidor**,
+que aparece na aba de eventos (exige a permissão Gerenciar Eventos).
+
+Sem nenhuma vaga informada, o padrão é 5 participantes sem função definida —
+serve para qualquer atividade que não use a tríade de MMORPG.
 
 ### Canais privados por cargo
 
@@ -446,6 +465,19 @@ painel: um botão público que concede esses cargos é escalada de privilégio
 para qualquer membro. A checagem roda ao montar o painel **e de novo a cada
 clique**, porque as permissões de um cargo podem mudar depois. Quem cria o
 painel também não pode expor cargo igual ou acima do seu próprio.
+
+**Transações são serializadas por um lock.** Todas as corrotinas compartilham
+uma conexão SQLite, e há `await` entre o `BEGIN` e o `COMMIT`. Sem o lock, duas
+transações concorrentes estouram `cannot start a transaction within a
+transaction` — na prática, erro interno para quem clicasse ao mesmo tempo que
+outra pessoa. O lock cobre só os blocos transacionais; leituras e escritas
+avulsas seguem livres.
+
+**A última vaga é decidida pelo banco.** Entrar num grupo é um `INSERT`
+condicional: a contagem de ocupantes e o limite são avaliados dentro da mesma
+instrução, então dois cliques simultâneos na última vaga não podem passar os
+dois. E trocar para uma função lotada desfaz a troca em vez de custar a vaga
+que a pessoa já tinha.
 
 **Cogs cuidam de interface; `core/` cuida de regra.** A divisória não é
 estética: o que está em `core/` roda sem Gateway, sem token e sem rede, e é

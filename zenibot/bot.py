@@ -31,6 +31,7 @@ INITIAL_COGS = (
     "zenibot.cogs.tempvoice",
     "zenibot.cogs.tickets",
     "zenibot.cogs.channels",
+    "zenibot.cogs.party",
 )
 
 
