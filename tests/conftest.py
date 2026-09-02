@@ -43,6 +43,28 @@ async def db(settings: Settings) -> Database:
 
 
 @pytest_asyncio.fixture
+async def dbot(settings: Settings) -> Zenibot:
+    """Bot ligado a uma guild falsa do dpytest, para testes de integração.
+
+    Diferente da fixture `bot`, aqui os eventos de Gateway são despachados de
+    verdade, então os listeners rodam como rodariam em produção.
+    """
+    import discord.ext.test as dpytest
+
+    instancia = Zenibot(settings, background_tasks=False)
+    await instancia._async_setup_hook()
+    await instancia.setup_hook()
+    dpytest.configure(instancia, guilds=1, text_channels=2, members=2)
+    try:
+        yield instancia
+    finally:
+        await dpytest.empty_queue()
+        # bot.close() estoura num cliente que nunca conectou de fato; fechar
+        # o banco é o que realmente precisa acontecer.
+        await instancia.db.close()
+
+
+@pytest_asyncio.fixture
 async def bot(settings: Settings) -> Zenibot:
     """Bot com cogs carregados, sem Gateway e sem tarefas de fundo."""
     instancia = Zenibot(settings, background_tasks=False)

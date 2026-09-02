@@ -466,6 +466,15 @@ para qualquer membro. A checagem roda ao montar o painel **e de novo a cada
 clique**, porque as permissões de um cargo podem mudar depois. Quem cria o
 painel também não pode expor cargo igual ou acima do seu próprio.
 
+**Os listeners de evento têm teste de integração; as interações, não.** Os
+caminhos disparados pelo Gateway — `on_member_join` com boas-vindas, triagem
+de conta nova e anti-raid — rodam contra uma guild falsa do `dpytest`, com
+eventos despachados de verdade. Slash commands e componentes ficam de fora
+porque o `dpytest` 0.7 não tem API para interação nenhuma; é limite da
+ferramenta, não escolha. Vale registrar a assimetria: os listeners eram
+justamente o que nenhum teste unitário alcançava, já que ninguém os chama —
+o Discord chama.
+
 **Transações são serializadas por um lock.** Todas as corrotinas compartilham
 uma conexão SQLite, e há `await` entre o `BEGIN` e o `COMMIT`. Sem o lock, duas
 transações concorrentes estouram `cannot start a transaction within a
@@ -586,8 +595,11 @@ tudo dentro de `core/db.py`:
       próprio, isolado do bucket do bot
 - [ ] **Gestão de regras do AutoMod** por slash command
 - [ ] **Guild Scheduled Events** — espelhar em banco e lembrar os interessados
-- [ ] **Testes de integração** com `dpytest` (a suíte atual cobre lógica e
-      persistência, mas não o ciclo completo de uma interação)
+- [ ] **Cobrir interações** (slash commands, botões, modais). O `dpytest` não
+      ajuda: a API dele é da era dos comandos por prefixo e não expõe nada de
+      interação — há um teste em `test_integration.py` que falha de propósito
+      se uma versão futura passar a expor. O caminho viável é ampliar os
+      dublês de interação que já existem em `test_errors.py`.
 
 ---
 
@@ -617,6 +629,7 @@ pytest
 | `tests/test_db.py` | Config por guild, casos, regras, fila de jobs, backup, migrações sobre banco povoado |
 | `tests/test_bot.py` | Configuração, intents, carga de cogs, árvore de comandos, backup e retenção |
 | `tests/test_supervise.py` | Reconexão com backoff e os erros que **não** devem ser repetidos |
+| `tests/test_integration.py` | Eventos de Gateway numa guild falsa (dpytest): boas-vindas, triagem, anti-raid |
 
 Para validar uma **imagem Docker** — onde a suíte não existe, por ser
 dependência de desenvolvimento — use a verificação de deploy:

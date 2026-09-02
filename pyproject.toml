@@ -21,6 +21,9 @@ dev = [
     "ruff>=0.6",
     "pytest>=8",
     "pytest-asyncio>=0.24",
+    # Integração: simula uma guild falsa e despacha eventos de Gateway.
+    # Só cobre listeners — não tem suporte a slash commands nem componentes.
+    "dpytest>=0.7",
 ]
 
 [tool.pytest.ini_options]
