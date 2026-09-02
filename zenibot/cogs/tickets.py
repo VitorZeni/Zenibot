@@ -32,29 +32,18 @@ from discord.ext import commands
 
 from zenibot.bot import Zenibot
 from zenibot.core import embeds
-from zenibot.core.checks import ZenibotError, is_staff
+from zenibot.core.checks import ZenibotError, e_staff, is_staff
 from zenibot.core.db import Ticket
 from zenibot.core.errors import respond_error
+from zenibot.core.guild import categoria_cheia, exigir_publicavel
 
 log = logging.getLogger(__name__)
 
-MAX_POR_CATEGORIA = 50
 LIMITE_ASSUNTO = 100
 
 
 def nome_do_canal(numero: int) -> str:
     return f"ticket-{numero:04d}"
-
-
-async def eh_staff(interaction: discord.Interaction) -> bool:
-    """Mesma regra dos comandos: Gerenciar Servidor ou cargo configurado."""
-    membro = interaction.user
-    if not isinstance(membro, discord.Member):
-        return False
-    if membro.guild_permissions.manage_guild:
-        return True
-    cfg = await interaction.client.db.get_config(interaction.guild_id)
-    return any(cargo.id in cfg.staff_role_ids for cargo in membro.roles)
 
 
 class TicketButton(
@@ -161,11 +150,11 @@ class Tickets(commands.Cog):
                 "Não consigo criar canais — falta a permissão **Gerenciar Canais**."
             )
 
-        categoria = guild.get_channel(cfg.ticket_category_id) if cfg.ticket_category_id else None
-        if categoria is not None and len(categoria.channels) >= MAX_POR_CATEGORIA:
-            raise ZenibotError(
-                "A categoria de tickets está cheia. Avise a equipe."
-            )
+        categoria = (
+            guild.get_channel(cfg.ticket_category_id) if cfg.ticket_category_id else None
+        )
+        if categoria_cheia(categoria):
+            raise ZenibotError("A categoria de tickets está cheia. Avise a equipe.")
 
         modal = AssuntoModal()
         await interaction.response.send_modal(modal)
@@ -223,7 +212,7 @@ class Tickets(commands.Cog):
         )
 
     async def acao_assumir(self, interaction: discord.Interaction, ticket_id: int) -> None:
-        if not await eh_staff(interaction):
+        if not await e_staff(interaction):
             raise ZenibotError("Só a equipe pode assumir tickets.")
 
         ticket = await self.bot.db.get_ticket(ticket_id)
@@ -246,7 +235,7 @@ class Tickets(commands.Cog):
         ticket = await self.bot.db.get_ticket(ticket_id)
         if ticket is None:
             raise ZenibotError("Esse ticket não existe mais.")
-        if interaction.user.id != ticket.opener_id and not await eh_staff(interaction):
+        if interaction.user.id != ticket.opener_id and not await e_staff(interaction):
             raise ZenibotError("Só quem abriu o ticket ou a equipe pode fechá-lo.")
 
         if not await self.bot.db.close_ticket(ticket_id):
@@ -278,7 +267,7 @@ class Tickets(commands.Cog):
         )
 
     async def acao_apagar(self, interaction: discord.Interaction, ticket_id: int) -> None:
-        if not await eh_staff(interaction):
+        if not await e_staff(interaction):
             raise ZenibotError("Só a equipe pode apagar o canal.")
 
         ticket = await self.bot.db.get_ticket(ticket_id)
@@ -398,12 +387,7 @@ class Tickets(commands.Cog):
             )
 
         destino = canal or interaction.channel
-        perms = destino.permissions_for(interaction.guild.me)
-        if not (perms.view_channel and perms.send_messages and perms.embed_links):
-            raise ZenibotError(
-                f"Preciso de **Ver Canal**, **Enviar Mensagens** e **Inserir "
-                f"Links** em {destino.mention}."
-            )
+        exigir_publicavel(destino, interaction.guild.me)
 
         await destino.send(
             embed=embeds.info(descricao, title=titulo),

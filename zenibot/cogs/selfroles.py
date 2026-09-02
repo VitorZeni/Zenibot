@@ -33,6 +33,8 @@ from zenibot.bot import Zenibot
 from zenibot.core import embeds
 from zenibot.core.checks import ZenibotError, is_staff
 from zenibot.core.errors import respond_error
+from zenibot.core.guild import exigir_publicavel
+from zenibot.core.messages import resolver_mensagem
 
 log = logging.getLogger(__name__)
 
@@ -59,12 +61,6 @@ DANGEROUS_PERMISSIONS = (
     "mention_everyone",
     "view_audit_log",
 )
-
-MESSAGE_LINK = re.compile(
-    r"https?://(?:\w+\.)?discord(?:app)?\.com/channels/"
-    r"(?P<guild>\d+)/(?P<channel>\d+)/(?P<message>\d+)"
-)
-
 
 def dangerous_permissions(role: discord.Role) -> list[str]:
     """Lista as permissões perigosas que o cargo concede."""
@@ -314,46 +310,6 @@ class SelfRoles(commands.Cog):
         guild_only=True,
     )
 
-    async def fetch_panel(
-        self, interaction: discord.Interaction, referencia: str
-    ) -> discord.Message:
-        """Resolve um ID ou link de mensagem para a mensagem do painel."""
-        referencia = referencia.strip()
-        canal: discord.abc.Messageable | None = interaction.channel
-
-        link = MESSAGE_LINK.search(referencia)
-        if link:
-            if int(link["guild"]) != interaction.guild_id:
-                raise ZenibotError("Esse link aponta para outro servidor.")
-            canal = interaction.guild.get_channel(int(link["channel"]))
-            message_id = int(link["message"])
-        else:
-            if not referencia.isdigit():
-                raise ZenibotError(
-                    "Informe o ID da mensagem do painel ou o link dela "
-                    "(botão direito na mensagem > Copiar link da mensagem)."
-                )
-            message_id = int(referencia)
-
-        if canal is None:
-            raise ZenibotError("Não encontrei o canal dessa mensagem.")
-
-        try:
-            message = await canal.fetch_message(message_id)
-        except discord.NotFound as exc:
-            raise ZenibotError(
-                "Mensagem não encontrada. Se o painel está em outro canal, "
-                "use o link completo em vez do ID."
-            ) from exc
-        except discord.Forbidden as exc:
-            raise ZenibotError("Não tenho acesso a esse canal.") from exc
-
-        if message.author.id != self.bot.user.id:
-            raise ZenibotError("Essa mensagem não foi enviada por mim.")
-        return message
-
-    # ------------------------------------------------------------------
-
     @painel.command(name="criar", description="Cria um painel de cargos vazio")
     @app_commands.describe(
         canal="Onde publicar o painel",
@@ -368,12 +324,7 @@ class SelfRoles(commands.Cog):
         titulo: app_commands.Range[str, 1, 256],
         descricao: app_commands.Range[str, 1, 2000] | None = None,
     ) -> None:
-        perms = canal.permissions_for(interaction.guild.me)
-        if not (perms.view_channel and perms.send_messages and perms.embed_links):
-            raise ZenibotError(
-                f"Preciso de **Ver Canal**, **Enviar Mensagens** e "
-                f"**Inserir Links** em {canal.mention}."
-            )
+        exigir_publicavel(canal, interaction.guild.me)
 
         await interaction.response.defer(ephemeral=True)
         mensagem = await canal.send(
@@ -408,7 +359,9 @@ class SelfRoles(commands.Cog):
         assert_role_assignable(cargo, interaction.user, interaction.guild.me)
 
         await interaction.response.defer(ephemeral=True)
-        alvo = await self.fetch_panel(interaction, mensagem)
+        alvo = await resolver_mensagem(
+            interaction, mensagem, descricao="mensagem do painel"
+        )
         botoes = read_buttons(alvo)
 
         if any(b.role_id == cargo.id for b in botoes):
@@ -448,7 +401,9 @@ class SelfRoles(commands.Cog):
         self, interaction: discord.Interaction, mensagem: str, cargo: discord.Role
     ) -> None:
         await interaction.response.defer(ephemeral=True)
-        alvo = await self.fetch_panel(interaction, mensagem)
+        alvo = await resolver_mensagem(
+            interaction, mensagem, descricao="mensagem do painel"
+        )
         botoes = read_buttons(alvo)
 
         restantes = [b for b in botoes if b.role_id != cargo.id]

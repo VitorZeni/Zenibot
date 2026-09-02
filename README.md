@@ -392,10 +392,16 @@ zenibot/
 ├── __main__.py          Entrypoint: python -m zenibot
 ├── bot.py               Classe Zenibot, intents, error handler global
 ├── config.py            Settings via env vars (pydantic-settings)
-├── core/
+├── core/                Lógica sem Discord na frente — é o que os testes exercitam
 │   ├── db.py            TODO o SQL do projeto vive aqui
 │   ├── checks.py        Autorização e hierarquia de cargos
+│   ├── errors.py        Tradução de erro para slash commands E componentes
+│   ├── guild.py         Tetos do Discord e checagem de canal publicável
+│   ├── messages.py      Resolver mensagem por ID/link, validar URL
+│   ├── colors.py        Paleta, nomes e parsing de cor
 │   ├── embeds.py        Factories de embed + NO_MENTIONS
+│   ├── escalation.py    Régua de punições (função pura)
+│   ├── antiraid.py      Janela deslizante de entradas
 │   ├── duration.py      Parsing de "1h30m"
 │   └── logging_setup.py Logging + filtro de token
 └── cogs/                Um módulo por domínio, recarregável a quente
@@ -440,6 +446,12 @@ painel: um botão público que concede esses cargos é escalada de privilégio
 para qualquer membro. A checagem roda ao montar o painel **e de novo a cada
 clique**, porque as permissões de um cargo podem mudar depois. Quem cria o
 painel também não pode expor cargo igual ou acima do seu próprio.
+
+**Cogs cuidam de interface; `core/` cuida de regra.** A divisória não é
+estética: o que está em `core/` roda sem Gateway, sem token e sem rede, e é
+por isso que 243 testes rodam em três segundos. Quando algo num cog vira
+lógica de verdade — a régua de punições, a janela do anti-raid, o orçamento
+de componentes —, ele desce para `core/` e ganha teste direto.
 
 **Cor se escolhe reconhecendo, não lembrando.** Um campo hex sozinho exige
 saber o código de antemão, e a única forma de conferir é digitar e olhar. O

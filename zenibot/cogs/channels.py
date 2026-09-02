@@ -22,10 +22,10 @@ from zenibot.bot import Zenibot
 from zenibot.core import embeds
 from zenibot.core.checks import ZenibotError, is_staff
 from zenibot.core.errors import respond_error
+from zenibot.core.guild import MAX_POR_CATEGORIA, categoria_cheia
 
 log = logging.getLogger(__name__)
 
-MAX_POR_CATEGORIA = 50
 MAX_CARGOS = 10
 TIMEOUT = 300
 
@@ -156,7 +156,7 @@ class CriarView(ui.View):
         guild = interaction.guild
         validar_cargos(self.cargos, guild)
 
-        if self.categoria is not None and len(self.categoria.channels) >= MAX_POR_CATEGORIA:
+        if categoria_cheia(self.categoria):
             raise ZenibotError(
                 f"A categoria **{self.categoria.name}** está cheia "
                 f"({MAX_POR_CATEGORIA} canais)."

@@ -35,6 +35,8 @@ from zenibot.cogs.builder import SalvarModal, salvar_modelo
 from zenibot.core import colors, embeds
 from zenibot.core.checks import ZenibotError, is_staff
 from zenibot.core.errors import respond_error
+from zenibot.core.guild import pode_publicar
+from zenibot.core.messages import url_valida
 
 log = logging.getLogger(__name__)
 
@@ -66,10 +68,6 @@ class Bloco:
     tipo: str
     texto: str = ""
     url: str = ""
-
-
-def url_valida(valor: str) -> bool:
-    return valor.startswith(("http://", "https://"))
 
 
 def custo_componentes(blocos: list[Bloco]) -> int:
@@ -451,8 +449,7 @@ class ContainerBuilderView(ui.LayoutView):
         self.render()
 
     def pode_publicar(self) -> bool:
-        perms = self.canal.permissions_for(self.canal.guild.me)
-        return perms.view_channel and perms.send_messages and perms.embed_links
+        return pode_publicar(self.canal, self.canal.guild.me)
 
     def status(self) -> str:
         if not self.pode_publicar():

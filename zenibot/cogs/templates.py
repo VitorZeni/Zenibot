@@ -9,7 +9,6 @@ reaplicar um modelo sobre a mensagem — o conteúdo vem sempre do banco.
 from __future__ import annotations
 
 import logging
-import re
 
 import discord
 from discord import app_commands, ui
@@ -24,13 +23,9 @@ from zenibot.cogs.containers import (
 )
 from zenibot.core import embeds
 from zenibot.core.checks import ZenibotError, is_staff
+from zenibot.core.messages import resolver_mensagem
 
 log = logging.getLogger(__name__)
-
-MESSAGE_LINK = re.compile(
-    r"https?://(?:\w+\.)?discord(?:app)?\.com/channels/"
-    r"(?P<guild>\d+)/(?P<channel>\d+)/(?P<message>\d+)"
-)
 
 
 class Templates(commands.Cog):
@@ -137,7 +132,7 @@ class Templates(commands.Cog):
     ) -> None:
         modelo = await self.buscar(interaction.guild_id, nome)
         await interaction.response.defer(ephemeral=True)
-        alvo = await self.resolver_mensagem(interaction, mensagem)
+        alvo = await resolver_mensagem(interaction, mensagem)
 
         if modelo.tipo == "embed":
             # view=None limpa componentes de uma versão anterior em container.
@@ -174,47 +169,6 @@ class Templates(commands.Cog):
         await interaction.response.send_message(
             embed=embeds.ok(f"Modelo `{nome}` apagado."), ephemeral=True
         )
-
-    # ------------------------------------------------------------------
-
-    async def resolver_mensagem(
-        self, interaction: discord.Interaction, referencia: str
-    ) -> discord.Message:
-        referencia = referencia.strip()
-        canal: discord.abc.Messageable | None = interaction.channel
-
-        link = MESSAGE_LINK.search(referencia)
-        if link:
-            if int(link["guild"]) != interaction.guild_id:
-                raise ZenibotError("Esse link aponta para outro servidor.")
-            canal = interaction.guild.get_channel(int(link["channel"]))
-            message_id = int(link["message"])
-        else:
-            if not referencia.isdigit():
-                raise ZenibotError(
-                    "Informe o ID da mensagem ou o link dela (botão direito na "
-                    "mensagem > Copiar link da mensagem)."
-                )
-            message_id = int(referencia)
-
-        if canal is None:
-            raise ZenibotError("Não encontrei o canal dessa mensagem.")
-
-        try:
-            alvo = await canal.fetch_message(message_id)
-        except discord.NotFound as exc:
-            raise ZenibotError(
-                "Mensagem não encontrada. Se ela está em outro canal, use o "
-                "link completo em vez do ID."
-            ) from exc
-        except discord.Forbidden as exc:
-            raise ZenibotError("Não tenho acesso a esse canal.") from exc
-
-        # Só dá para editar mensagem do próprio bot: a API do Discord não
-        # permite editar mensagem de terceiros.
-        if alvo.author.id != self.bot.user.id:
-            raise ZenibotError("Essa mensagem não foi enviada por mim.")
-        return alvo
 
 
 async def setup(bot: Zenibot) -> None:

@@ -28,17 +28,29 @@ class HierarchyError(ZenibotError):
     pass
 
 
+async def e_staff(interaction: discord.Interaction) -> bool:
+    """Manage Server, ou um dos cargos de staff configurados.
+
+    Existe como função, e não só como decorador, porque callbacks de botão
+    não passam pelo sistema de checks dos slash commands e precisavam
+    reimplementar a mesma regra.
+    """
+    membro = interaction.user
+    if not isinstance(membro, discord.Member):
+        return False
+    if membro.guild_permissions.manage_guild:
+        return True
+    config = await interaction.client.db.get_config(interaction.guild_id)  # type: ignore[attr-defined]
+    return any(cargo.id in config.staff_role_ids for cargo in membro.roles)
+
+
 def is_staff():
-    """Passa se o membro tem Manage Server ou um cargo de staff configurado."""
+    """Versão decorador de `e_staff`, para slash commands."""
 
     async def predicate(interaction: discord.Interaction) -> bool:
         if not isinstance(interaction.user, discord.Member):
             raise ZenibotError("Este comando só funciona dentro de um servidor.")
-        if interaction.user.guild_permissions.manage_guild:
-            return True
-
-        config = await interaction.client.db.get_config(interaction.guild_id)  # type: ignore[attr-defined]
-        if any(role.id in config.staff_role_ids for role in interaction.user.roles):
+        if await e_staff(interaction):
             return True
         raise NotStaff("Você não tem permissão para usar este comando.")
 

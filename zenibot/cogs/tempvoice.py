@@ -35,11 +35,10 @@ from discord.ext import commands
 from zenibot.bot import Zenibot
 from zenibot.core import embeds
 from zenibot.core.checks import ZenibotError, is_staff
+from zenibot.core.guild import MAX_POR_CATEGORIA, categoria_cheia
 
 log = logging.getLogger(__name__)
 
-# Teto do Discord por categoria. O limite configurável fica abaixo disto.
-MAX_POR_CATEGORIA = 50
 
 
 def nome_do_canal(membro: discord.Member) -> str:
@@ -161,8 +160,10 @@ class TempVoice(commands.Cog):
         if abertos >= cfg.voice_max_channels:
             log.info("Limite de canais temporários atingido na guild %s", guild.id)
             return None
-        if categoria is not None and len(categoria.channels) >= MAX_POR_CATEGORIA:
-            log.warning("Categoria cheia na guild %s (%d canais)", guild.id, MAX_POR_CATEGORIA)
+        if categoria_cheia(categoria):
+            log.warning(
+                "Categoria cheia na guild %s (%d canais)", guild.id, MAX_POR_CATEGORIA
+            )
             return None
 
         # O dono administra o próprio canal pela UI do Discord: renomear,

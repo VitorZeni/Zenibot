@@ -11,6 +11,7 @@ from discord.ext import commands
 from zenibot.bot import INITIAL_COGS, Zenibot
 from zenibot.core import embeds
 from zenibot.core.checks import is_owner, is_staff
+from zenibot.core.guild import exigir_publicavel
 
 log = logging.getLogger(__name__)
 
@@ -75,16 +76,7 @@ class Admin(commands.Cog):
         canal: discord.TextChannel,
     ) -> None:
         # Checar as permissões AGORA evita 403 silencioso na primeira mensagem.
-        perms = canal.permissions_for(interaction.guild.me)
-        if not (perms.view_channel and perms.send_messages and perms.embed_links):
-            await interaction.response.send_message(
-                embed=embeds.error(
-                    f"Preciso de **Ver Canal**, **Enviar Mensagens** e "
-                    f"**Inserir Links** em {canal.mention}."
-                ),
-                ephemeral=True,
-            )
-            return
+        exigir_publicavel(canal, interaction.guild.me)
 
         await self.bot.db.set_config(interaction.guild_id, **{tipo.value: canal.id})
         await interaction.response.send_message(

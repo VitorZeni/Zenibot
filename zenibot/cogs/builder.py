@@ -23,6 +23,8 @@ from zenibot.bot import Zenibot
 from zenibot.core import colors, embeds
 from zenibot.core.checks import ZenibotError, is_staff
 from zenibot.core.errors import respond_error
+from zenibot.core.guild import pode_publicar
+from zenibot.core.messages import url_valida
 
 log = logging.getLogger(__name__)
 
@@ -44,10 +46,6 @@ TIMEOUT = 900
 # Modelos salvos por servidor. O teto evita que a tabela vire depósito.
 LIMITE_MODELOS = 50
 LIMITE_NOME_MODELO = 32
-
-
-def url_valida(valor: str) -> bool:
-    return valor.startswith(("http://", "https://"))
 
 
 def embed_para_payload(embed: discord.Embed) -> dict:
@@ -311,8 +309,7 @@ class BuilderView(discord.ui.View):
         return self.embed
 
     def pode_publicar(self) -> bool:
-        perms = self.canal.permissions_for(self.canal.guild.me)
-        return perms.view_channel and perms.send_messages and perms.embed_links
+        return pode_publicar(self.canal, self.canal.guild.me)
 
     def status(self) -> str:
         # Avisar aqui, e não só no Publicar: descobrir que o canal é fechado
