@@ -16,48 +16,8 @@ from zenibot.cogs.builder import (
     LIMITE_TOTAL,
     BuilderView,
     embed_vazio,
-    parse_cor,
     url_valida,
 )
-
-# ---------------------------------------------------------------------------
-# Cor
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("entrada", ["#5865F2", "5865F2", "0x5865F2", "#5865f2"])
-def test_parse_cor_aceita_variacoes_de_hex(entrada: str) -> None:
-    """O `#` é opcional porque quase todo mundo cola o hex sem ele."""
-    assert parse_cor(entrada) == discord.Colour(0x5865F2)
-
-
-def test_parse_cor_vazia_devolve_none() -> None:
-    assert parse_cor("") is None
-    assert parse_cor("   ") is None
-
-
-def test_parse_cor_aceita_atalho_de_tres_digitos() -> None:
-    """`#58F` expande para `#5588FF`, como no CSS."""
-    assert parse_cor("#123") == discord.Colour(0x112233)
-
-
-@pytest.mark.parametrize(
-    "entrada",
-    [
-        "zzz",
-        "vermelho",
-        "#GGGGGG",
-        # O from_str do discord.py completaria com zero à esquerda e devolveria
-        # #012345 sem reclamar — um erro de digitação viraria cor errada.
-        "#12345",
-        "#1234",
-        "#12",
-    ],
-)
-def test_parse_cor_rejeita_invalido(entrada: str) -> None:
-    with pytest.raises(ValueError):
-        parse_cor(entrada)
-
 
 # ---------------------------------------------------------------------------
 # URLs

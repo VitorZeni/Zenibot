@@ -59,10 +59,14 @@ como se tivesse sido aplicado.
 /embed criar
 ```
 
-Abre um painel efêmero com prévia ao vivo: botões para **Conteúdo**,
-**Aparência** e **Rodapé**, um seletor de canal de destino, e **Publicar**.
-Os formulários já vêm preenchidos com o que você digitou antes, então ajustar
-não exige redigitar tudo.
+Abre um painel efêmero com prévia ao vivo: um **menu de cores** com amostras
+visuais, botões para **Conteúdo**, **Imagens** e **Rodapé**, seletor de canal
+e **Publicar**. Os formulários já vêm preenchidos com o que você digitou
+antes, então ajustar não exige redigitar tudo.
+
+O menu de cores traz a paleta do Discord com quadrados coloridos, mais
+**cor do meu cargo**, **aleatória** e **personalizada** (hex). Onde há campo
+de texto, também valem nomes: `vermelho`, `azul`, `verde`.
 
 O contador de caracteres no topo avisa antes de estourar o limite de 6000 do
 Discord — que soma título, descrição, rodapé e autor, não só o texto.
@@ -436,6 +440,14 @@ painel: um botão público que concede esses cargos é escalada de privilégio
 para qualquer membro. A checagem roda ao montar o painel **e de novo a cada
 clique**, porque as permissões de um cargo podem mudar depois. Quem cria o
 painel também não pode expor cargo igual ou acima do seu próprio.
+
+**Cor se escolhe reconhecendo, não lembrando.** Um campo hex sozinho exige
+saber o código de antemão, e a única forma de conferir é digitar e olhar. O
+menu resolve isso com quadrados de emoji, que o Discord renderiza como cor de
+verdade — a escolha vira visual. O hex continua para quem precisa de um tom
+exato, e o texto aceita nomes. Os emojis usados são os quadrados padrão do
+Unicode 12, e não os recentes como 🩷, que aparecem como caixa vazia em
+clientes antigos.
 
 **Canal privado não guarda estado paralelo.** Quem enxerga um canal já está
 registrado nas permissões dele, que é onde o Discord guarda isso. Uma tabela

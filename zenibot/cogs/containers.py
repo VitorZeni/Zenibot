@@ -31,8 +31,8 @@ from discord import app_commands, ui
 from discord.ext import commands
 
 from zenibot.bot import Zenibot
-from zenibot.cogs.builder import SalvarModal, parse_cor, salvar_modelo
-from zenibot.core import embeds
+from zenibot.cogs.builder import SalvarModal, salvar_modelo
+from zenibot.core import colors, embeds
 from zenibot.core.checks import ZenibotError, is_staff
 from zenibot.core.errors import respond_error
 
@@ -44,10 +44,10 @@ LIMITE_TEXTINPUT = 4000
 TIMEOUT = 900
 
 # O que os controles consomem do orçamento de 40 na mensagem de prévia:
-# texto de status (1) + linha de ações (1+5) + linha de edição (1+5) +
-# linha do seletor (1+1). Um teste confronta esta conta com o payload real,
-# então acrescentar um botão aqui quebra o teste em vez de virar 400 em uso.
-CUSTO_CONTROLES = 15
+# status (1) + ações (1+4) + cor (1+1) + edição (1+5) + canal (1+1).
+# Um teste confronta esta conta com o payload real, então acrescentar um
+# controle aqui quebra o teste em vez de virar 400 em uso.
+CUSTO_CONTROLES = 16
 
 # Componentes gerados por bloco. Uma seção conta 3 (ela, o texto e a
 # miniatura); uma imagem conta 2 (a galeria e o item dentro dela).
@@ -272,21 +272,43 @@ class AcoesRow(ui.ActionRow):
     async def add_imagem(self, interaction: discord.Interaction, button: ui.Button):
         await self._coletar(interaction, "imagem")
 
-    @ui.button(label="Cor", style=discord.ButtonStyle.secondary)
-    async def cor(self, interaction: discord.Interaction, button: ui.Button):
+class ContainerCorSelect(colors.CorSelect):
+    def __init__(self, painel: ContainerBuilderView) -> None:
+        super().__init__(painel.cor)
+        self.painel = painel
+
+    async def aplicar(
+        self, interaction: discord.Interaction, cor: discord.Colour | None
+    ) -> None:
+        self.painel.cor = cor
+        await self.painel.refresh(interaction)
+
+    async def pedir_hex(self, interaction: discord.Interaction) -> None:
         modal = CorModal()
         await interaction.response.send_modal(modal)
         if await modal.wait():
             return
         try:
-            self.painel.cor = parse_cor(str(modal.cor))
+            self.painel.cor = colors.parse_cor(str(modal.cor))
         except ValueError:
             await modal.interaction.response.send_message(
-                embed=embeds.error("Cor inválida. Use um hex como `#5865F2`."),
+                embed=embeds.error(
+                    "Cor inválida. Use um hex como `#5865F2` ou um nome como "
+                    "`vermelho`."
+                ),
                 ephemeral=True,
             )
             return
         await self.painel.refresh(modal.interaction)
+
+
+class CorRow(ui.ActionRow):
+    """Um select ocupa a linha inteira, então a cor ganha a sua."""
+
+    def __init__(self, painel: ContainerBuilderView) -> None:
+        super().__init__()
+        self.painel = painel
+        self.add_item(ContainerCorSelect(painel))
 
 
 class EditarRow(ui.ActionRow):
@@ -423,6 +445,7 @@ class ContainerBuilderView(ui.LayoutView):
         self.mensagem: discord.InteractionMessage | None = None
 
         self.acoes = AcoesRow(self)
+        self.cor_row = CorRow(self)
         self.editar = EditarRow(self)
         self.selecao = CanalRow(self)
         self.render()
@@ -457,6 +480,7 @@ class ContainerBuilderView(ui.LayoutView):
         self.acoes.sync()
         self.editar.sync()
         self.add_item(self.acoes)
+        self.add_item(self.cor_row)
         self.add_item(self.editar)
         self.add_item(self.selecao)
 

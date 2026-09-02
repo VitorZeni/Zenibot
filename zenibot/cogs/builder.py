@@ -20,7 +20,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from zenibot.bot import Zenibot
-from zenibot.core import embeds
+from zenibot.core import colors, embeds
 from zenibot.core.checks import ZenibotError, is_staff
 from zenibot.core.errors import respond_error
 
@@ -48,27 +48,6 @@ LIMITE_NOME_MODELO = 32
 
 def url_valida(valor: str) -> bool:
     return valor.startswith(("http://", "https://"))
-
-
-def parse_cor(valor: str) -> discord.Colour | None:
-    """Aceita `#5865F2`, `5865F2`, `#58F` (atalho), `0x5865F2` ou `rgb(...)`.
-
-    O `#` é opcional porque quase todo mundo cola o hex sem ele.
-    Levanta ValueError no formato inválido.
-    """
-    valor = valor.strip()
-    if not valor:
-        return None
-    if not valor.startswith(("#", "0x", "rgb")):
-        valor = f"#{valor}"
-
-    # O from_str do discord.py completa hex incompleto com zero à esquerda:
-    # "#12345" vira "#012345" sem reclamar. Como isso transforma um erro de
-    # digitação numa cor errada em silêncio, exigimos 3 ou 6 dígitos.
-    if valor.startswith("#") and len(valor) - 1 not in (3, 6):
-        raise ValueError(f"hex precisa ter 3 ou 6 dígitos: {valor}")
-
-    return discord.Colour.from_str(valor)
 
 
 def embed_para_payload(embed: discord.Embed) -> dict:
@@ -125,17 +104,27 @@ class ContentModal(discord.ui.Modal, title="Conteúdo do embed"):
         self.interaction = interaction
 
 
-class AppearanceModal(discord.ui.Modal, title="Aparência"):
+class CorHexModal(discord.ui.Modal, title="Cor personalizada"):
+    """Aberto pela opção "Personalizada" do menu de cores."""
+
+    def __init__(self, atual: discord.Colour | None) -> None:
+        super().__init__()
+        self.cor = discord.ui.TextInput(
+            label="Código da cor",
+            required=False,
+            placeholder="#5865F2, 5865F2 ou um nome como vermelho",
+            max_length=20,
+            default=str(atual) if atual else None,
+        )
+        self.add_item(self.cor)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        self.interaction = interaction
+
+
+class ImagensModal(discord.ui.Modal, title="Imagens"):
     def __init__(self, atual: discord.Embed) -> None:
         super().__init__()
-        cor = str(atual.color) if atual.color else None
-        self.cor = discord.ui.TextInput(
-            label="Cor (hex)",
-            required=False,
-            placeholder="#5865F2",
-            max_length=20,
-            default=cor,
-        )
         self.imagem = discord.ui.TextInput(
             label="Imagem grande (URL)",
             required=False,
@@ -148,7 +137,7 @@ class AppearanceModal(discord.ui.Modal, title="Aparência"):
             placeholder="https://...",
             default=atual.thumbnail.url or None,
         )
-        for campo in (self.cor, self.imagem, self.thumbnail):
+        for campo in (self.imagem, self.thumbnail):
             self.add_item(campo)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
@@ -227,6 +216,36 @@ async def salvar_modelo(
     )
 
 
+class BuilderCorSelect(colors.CorSelect):
+    def __init__(self, painel: BuilderView) -> None:
+        super().__init__(painel.embed.colour)
+        self.painel = painel
+
+    async def aplicar(
+        self, interaction: discord.Interaction, cor: discord.Colour | None
+    ) -> None:
+        self.painel.embed.colour = cor
+        await self.painel.refresh(interaction)
+
+    async def pedir_hex(self, interaction: discord.Interaction) -> None:
+        modal = CorHexModal(self.painel.embed.colour)
+        await interaction.response.send_modal(modal)
+        if await modal.wait():
+            return
+        try:
+            self.painel.embed.colour = colors.parse_cor(str(modal.cor))
+        except ValueError:
+            await modal.interaction.response.send_message(
+                embed=embeds.error(
+                    f"Cor inválida: `{str(modal.cor).strip()}`.\n"
+                    "Use um hex como `#5865F2` ou um nome como `vermelho`."
+                ),
+                ephemeral=True,
+            )
+            return
+        await self.painel.refresh(modal.interaction)
+
+
 class BuilderView(discord.ui.View):
     """Painel do rascunho. Só quem abriu consegue operar."""
 
@@ -242,6 +261,11 @@ class BuilderView(discord.ui.View):
         self.canal = canal
         self.embed = embed or discord.Embed()
         self.mensagem: discord.InteractionMessage | None = None
+        # Menu de cor na linha 1: instância, não decorador, porque precisa
+        # nascer refletindo a cor atual do rascunho.
+        self.cor_select = BuilderCorSelect(self)
+        self.cor_select.row = 1
+        self.add_item(self.cor_select)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """O painel é efêmero, mas a checagem não é redundante: sem ela, um
@@ -334,7 +358,7 @@ class BuilderView(discord.ui.View):
         self.canal = canal
         await self.refresh(interaction)
 
-    @discord.ui.button(label="Conteúdo", style=discord.ButtonStyle.primary, row=1)
+    @discord.ui.button(label="Conteúdo", style=discord.ButtonStyle.primary, row=2)
     async def conteudo(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ) -> None:
@@ -357,25 +381,13 @@ class BuilderView(discord.ui.View):
 
         await self.refresh(modal.interaction)
 
-    @discord.ui.button(label="Aparência", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Imagens", style=discord.ButtonStyle.secondary, row=2)
     async def aparencia(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ) -> None:
-        modal = AppearanceModal(self.embed)
+        modal = ImagensModal(self.embed)
         await interaction.response.send_modal(modal)
         if await modal.wait():
-            return
-
-        try:
-            self.embed.colour = parse_cor(str(modal.cor))
-        except ValueError:
-            await modal.interaction.response.send_message(
-                embed=embeds.error(
-                    f"Cor inválida: `{str(modal.cor).strip()}`. "
-                    "Use um hex como `#5865F2`."
-                ),
-                ephemeral=True,
-            )
             return
 
         for valor, rotulo, aplicar in (
@@ -394,7 +406,7 @@ class BuilderView(discord.ui.View):
 
         await self.refresh(modal.interaction)
 
-    @discord.ui.button(label="Rodapé", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Rodapé", style=discord.ButtonStyle.secondary, row=2)
     async def rodape(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ) -> None:
@@ -421,7 +433,7 @@ class BuilderView(discord.ui.View):
 
         await self.refresh(modal.interaction)
 
-    @discord.ui.button(label="Publicar", style=discord.ButtonStyle.success, row=2)
+    @discord.ui.button(label="Publicar", style=discord.ButtonStyle.success, row=3)
     async def publicar(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ) -> None:
@@ -455,7 +467,7 @@ class BuilderView(discord.ui.View):
         )
         self.stop()
 
-    @discord.ui.button(label="Salvar modelo", style=discord.ButtonStyle.primary, row=2)
+    @discord.ui.button(label="Salvar modelo", style=discord.ButtonStyle.primary, row=3)
     async def salvar(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ) -> None:
@@ -474,7 +486,7 @@ class BuilderView(discord.ui.View):
             payload=embed_para_payload(self.embed),
         )
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger, row=2)
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger, row=3)
     async def cancelar(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ) -> None:
