@@ -206,6 +206,14 @@ Sem ativar o venv, no PowerShell:
 Ambos funcionam de qualquer diretório: o projeto resolve `.env`, o banco e as
 migrações a partir da raiz do pacote, não do diretório atual.
 
+Para conferir se o bot tem as permissões que cada recurso exige — o valor do
+convite é só o padrão de entrada, e o cargo pode ter sido ajustado depois nas
+configurações do servidor:
+
+```bash
+python scripts/check_permissions.py
+```
+
 Para inspecionar o que está registrado, e em qual escopo:
 
 ```bash
