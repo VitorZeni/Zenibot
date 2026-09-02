@@ -18,6 +18,7 @@ from zenibot.cogs.builder import (
     embed_vazio,
     url_valida,
 )
+from zenibot.core import embeds
 
 # ---------------------------------------------------------------------------
 # URLs
@@ -121,6 +122,19 @@ def test_previa_de_rascunho_vazio_mostra_orientacao() -> None:
     previa = view.preview()
     assert previa is not view.embed
     assert "Rascunho vazio" in (previa.title or "")
+
+
+def test_cor_escolhida_aparece_mesmo_com_rascunho_vazio() -> None:
+    """Regressão: a troca de cor era guardada mas não aparecia, porque a
+    prévia mostrava o substituto de rascunho vazio, que tinha cor própria."""
+    view = BuilderView(autor_id=1, canal=canal_falso())
+    view.embed.colour = discord.Colour(0x57F287)
+    assert view.preview().colour == discord.Colour(0x57F287)
+
+
+def test_rascunho_vazio_sem_cor_usa_a_do_substituto() -> None:
+    view = BuilderView(autor_id=1, canal=canal_falso())
+    assert view.preview().colour == embeds.COLOR_INFO
 
 
 def test_previa_mostra_o_proprio_embed_quando_preenchido() -> None:

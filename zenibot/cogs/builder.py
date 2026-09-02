@@ -300,12 +300,20 @@ class BuilderView(discord.ui.View):
     # ------------------------------------------------------------------
 
     def preview(self) -> discord.Embed:
-        """O que mostrar no painel: o rascunho, ou uma dica se estiver vazio."""
+        """O que mostrar no painel: o rascunho, ou uma dica se estiver vazio.
+
+        O substituto herda a cor já escolhida. Sem isso, trocar a cor antes de
+        escrever qualquer conteúdo não mudava nada na tela — a escolha era
+        guardada, mas quem estava vendo era o substituto, com cor própria.
+        """
         if embed_vazio(self.embed):
-            return embeds.info(
+            dica = embeds.info(
                 "Comece por **Conteúdo** para dar um título ou texto ao embed.",
                 title="Rascunho vazio",
             )
+            if self.embed.colour is not None:
+                dica.colour = self.embed.colour
+            return dica
         return self.embed
 
     def pode_publicar(self) -> bool:
