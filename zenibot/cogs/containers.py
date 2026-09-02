@@ -31,7 +31,7 @@ from discord import app_commands, ui
 from discord.ext import commands
 
 from zenibot.bot import Zenibot
-from zenibot.cogs.builder import parse_cor
+from zenibot.cogs.builder import SalvarModal, parse_cor, salvar_modelo
 from zenibot.core import embeds
 from zenibot.core.checks import ZenibotError, is_staff
 from zenibot.core.errors import respond_error
@@ -44,9 +44,10 @@ LIMITE_TEXTINPUT = 4000
 TIMEOUT = 900
 
 # O que os controles consomem do orçamento de 40 na mensagem de prévia:
-# texto de status (1) + linha de ações (1+5) + linha de edição (1+4) +
-# linha do seletor (1+1).
-CUSTO_CONTROLES = 14
+# texto de status (1) + linha de ações (1+5) + linha de edição (1+5) +
+# linha do seletor (1+1). Um teste confronta esta conta com o payload real,
+# então acrescentar um botão aqui quebra o teste em vez de virar 400 em uso.
+CUSTO_CONTROLES = 15
 
 # Componentes gerados por bloco. Uma seção conta 3 (ela, o texto e a
 # miniatura); uma imagem conta 2 (a galeria e o item dentro dela).
@@ -118,6 +119,27 @@ def montar_container(blocos: list[Bloco], cor: discord.Colour | None) -> ui.Cont
         elif bloco.tipo == "imagem":
             container.add_item(ui.MediaGallery(discord.MediaGalleryItem(bloco.url)))
     return container
+
+
+def blocos_para_payload(blocos: list[Bloco], cor: discord.Colour | None) -> dict:
+    return {
+        "cor": cor.value if cor else None,
+        "blocos": [
+            {"tipo": b.tipo, "texto": b.texto, "url": b.url} for b in blocos
+        ],
+    }
+
+
+def payload_para_blocos(
+    payload: dict,
+) -> tuple[list[Bloco], discord.Colour | None]:
+    blocos = [
+        Bloco(tipo=b["tipo"], texto=b.get("texto", ""), url=b.get("url", ""))
+        for b in payload.get("blocos", [])
+        if b.get("tipo") in CUSTO_BLOCO
+    ]
+    cor = payload.get("cor")
+    return blocos, discord.Colour(cor) if cor is not None else None
 
 
 def resumo(blocos: list[Bloco]) -> str:
@@ -279,6 +301,7 @@ class EditarRow(ui.ActionRow):
         self.desfazer.disabled = vazio
         self.limpar.disabled = vazio
         self.publicar.disabled = vazio
+        self.salvar.disabled = vazio
 
     @ui.button(label="Desfazer", style=discord.ButtonStyle.secondary)
     async def desfazer(self, interaction: discord.Interaction, button: ui.Button):
@@ -324,6 +347,24 @@ class EditarRow(ui.ActionRow):
         await interaction.response.edit_message(view=final)
         painel.stop()
 
+    @ui.button(label="Salvar modelo", style=discord.ButtonStyle.primary)
+    async def salvar(self, interaction: discord.Interaction, button: ui.Button):
+        painel = self.painel
+        if not painel.blocos:
+            raise ZenibotError("Nada a salvar — o container está vazio.")
+
+        modal = SalvarModal()
+        await interaction.response.send_modal(modal)
+        if await modal.wait():
+            return
+
+        await salvar_modelo(
+            modal.interaction,
+            nome=str(modal.nome),
+            tipo="container",
+            payload=blocos_para_payload(painel.blocos, painel.cor),
+        )
+
     @ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
     async def cancelar(self, interaction: discord.Interaction, button: ui.Button):
         vazio = ui.LayoutView(timeout=None)
@@ -366,12 +407,19 @@ class ContainerBuilderView(ui.LayoutView):
     os controles abaixo dela não vão junto.
     """
 
-    def __init__(self, autor_id: int, canal: discord.abc.GuildChannel) -> None:
+    def __init__(
+        self,
+        autor_id: int,
+        canal: discord.abc.GuildChannel,
+        *,
+        blocos: list[Bloco] | None = None,
+        cor: discord.Colour | None = None,
+    ) -> None:
         super().__init__(timeout=TIMEOUT)
         self.autor_id = autor_id
         self.canal = canal
-        self.blocos: list[Bloco] = []
-        self.cor: discord.Colour | None = None
+        self.blocos: list[Bloco] = blocos or []
+        self.cor = cor
         self.mensagem: discord.InteractionMessage | None = None
 
         self.acoes = AcoesRow(self)

@@ -21,6 +21,7 @@ Base arquitetural documentada em [GUIA-BOTS-DISCORD.md](GUIA-BOTS-DISCORD.md).
 | `cogs/antiraid.py` | `/antiraid ver`, `configurar`, `liberar` — detecção de picos de entrada |
 | `cogs/builder.py` | `/embed criar` — painel interativo de criação de embeds |
 | `cogs/containers.py` | `/container criar` — painel de containers (Components V2) |
+| `cogs/templates.py` | `/modelo listar`, `usar`, `aplicar`, `apagar` — modelos de mensagem salvos |
 
 **Ainda não implementado** (ver "Próximos passos"): gestão de regras do AutoMod via comando, Guild Scheduled Events, anti-raid.
 
@@ -80,6 +81,28 @@ miniatura à direita), **Separador** e **Imagem**. Mais **Cor** da faixa,
 
 O painel mostra quantos componentes ainda cabem. Botões cujo bloco não caberia
 mais aparecem desabilitados, em vez de falhar no Publicar.
+
+### Modelos salvos
+
+Nos dois painéis, o botão **Salvar modelo** guarda o que você montou sob um
+nome. Depois:
+
+```
+/modelo listar
+/modelo usar nome:regras
+/modelo aplicar nome:regras mensagem:<link>
+/modelo apagar nome:regras
+```
+
+`usar` abre o modelo **no editor**, não publica direto — quase sempre se quer
+ajustar uma data ou um nome antes de mandar. `aplicar` reescreve uma mensagem
+já publicada pelo bot, sem apagar e repostar (o link permanece o mesmo). O
+campo `nome` tem autocompletar. Limite de 50 modelos por servidor.
+
+> **O modelo é a fonte da verdade, não a mensagem publicada.** O bot nunca
+> tenta reconstruir blocos a partir de uma mensagem: componentes V2 não voltam
+> de forma confiável para o estado do editor. Na prática isso significa que só
+> dá para `aplicar` sobre uma mensagem se o conteúdo estiver salvo como modelo.
 
 ### Anti-raid
 

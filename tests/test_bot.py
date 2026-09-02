@@ -78,6 +78,7 @@ async def test_arvore_de_comandos(bot: Zenibot) -> None:
         "escalonamento ver", "escalonamento definir", "escalonamento remover",
         "antiraid ver", "antiraid configurar", "antiraid liberar",
         "embed criar", "container criar",
+        "modelo listar", "modelo usar", "modelo aplicar", "modelo apagar",
     }
     assert esperados <= comandos
 

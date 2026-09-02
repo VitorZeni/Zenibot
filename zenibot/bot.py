@@ -27,6 +27,7 @@ INITIAL_COGS = (
     "zenibot.cogs.antiraid",
     "zenibot.cogs.builder",
     "zenibot.cogs.containers",
+    "zenibot.cogs.templates",
 )
 
 

@@ -41,6 +41,10 @@ LIMITE_TEXTINPUT = 4000
 # Tempo de vida do rascunho. Depois disto o painel para de responder.
 TIMEOUT = 900
 
+# Modelos salvos por servidor. O teto evita que a tabela vire depósito.
+LIMITE_MODELOS = 50
+LIMITE_NOME_MODELO = 32
+
 
 def url_valida(valor: str) -> bool:
     return valor.startswith(("http://", "https://"))
@@ -65,6 +69,15 @@ def parse_cor(valor: str) -> discord.Colour | None:
         raise ValueError(f"hex precisa ter 3 ou 6 dígitos: {valor}")
 
     return discord.Colour.from_str(valor)
+
+
+def embed_para_payload(embed: discord.Embed) -> dict:
+    """Serializa para o modelo salvo. `to_dict` já é o formato da API."""
+    return {"embed": embed.to_dict()}
+
+
+def payload_para_embed(payload: dict) -> discord.Embed:
+    return discord.Embed.from_dict(payload["embed"])
 
 
 def embed_vazio(embed: discord.Embed) -> bool:
@@ -170,14 +183,64 @@ class FooterModal(discord.ui.Modal, title="Rodapé e autor"):
         self.interaction = interaction
 
 
+class SalvarModal(discord.ui.Modal, title="Salvar como modelo"):
+    nome = discord.ui.TextInput(
+        label="Nome do modelo",
+        max_length=LIMITE_NOME_MODELO,
+        placeholder="regras, boas-vindas, evento-semanal...",
+    )
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        self.interaction = interaction
+
+
+async def salvar_modelo(
+    interaction: discord.Interaction, *, nome: str, tipo: str, payload: dict
+) -> None:
+    """Grava o modelo e responde. Compartilhado pelos dois construtores."""
+    nome = nome.strip().lower()
+    if not nome:
+        raise ZenibotError("Dê um nome ao modelo.")
+
+    db = interaction.client.db
+    if await db.get_template(interaction.guild_id, nome) is None:
+        total = await db.count_templates(interaction.guild_id)
+        if total >= LIMITE_MODELOS:
+            raise ZenibotError(
+                f"Este servidor já tem {LIMITE_MODELOS} modelos. "
+                "Apague algum com `/modelo apagar`."
+            )
+
+    novo = await db.save_template(
+        guild_id=interaction.guild_id,
+        nome=nome,
+        tipo=tipo,
+        payload=payload,
+        autor_id=interaction.user.id,
+    )
+    acao = "salvo" if novo else "atualizado"
+    await interaction.response.send_message(
+        embed=embeds.ok(
+            f"Modelo `{nome}` {acao}.\nUse com `/modelo usar nome:{nome}`."
+        ),
+        ephemeral=True,
+    )
+
+
 class BuilderView(discord.ui.View):
     """Painel do rascunho. Só quem abriu consegue operar."""
 
-    def __init__(self, autor_id: int, canal: discord.abc.GuildChannel) -> None:
+    def __init__(
+        self,
+        autor_id: int,
+        canal: discord.abc.GuildChannel,
+        *,
+        embed: discord.Embed | None = None,
+    ) -> None:
         super().__init__(timeout=TIMEOUT)
         self.autor_id = autor_id
         self.canal = canal
-        self.embed = discord.Embed()
+        self.embed = embed or discord.Embed()
         self.mensagem: discord.InteractionMessage | None = None
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -391,6 +454,25 @@ class BuilderView(discord.ui.View):
             view=self,
         )
         self.stop()
+
+    @discord.ui.button(label="Salvar modelo", style=discord.ButtonStyle.primary, row=2)
+    async def salvar(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        if embed_vazio(self.embed):
+            raise ZenibotError("Nada a salvar — o embed está vazio.")
+
+        modal = SalvarModal()
+        await interaction.response.send_modal(modal)
+        if await modal.wait():
+            return
+
+        await salvar_modelo(
+            modal.interaction,
+            nome=str(modal.nome),
+            tipo="embed",
+            payload=embed_para_payload(self.embed),
+        )
 
     @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger, row=2)
     async def cancelar(

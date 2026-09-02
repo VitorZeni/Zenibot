@@ -120,6 +120,25 @@ class EscalationRule:
 
 
 @dataclass(slots=True)
+class Template:
+    nome: str
+    tipo: str
+    payload: dict[str, Any]
+    criado_por: int
+    updated_at: datetime
+
+    @classmethod
+    def from_row(cls, row: aiosqlite.Row) -> Template:
+        return cls(
+            nome=row["nome"],
+            tipo=row["tipo"],
+            payload=json.loads(row["payload"]),
+            criado_por=row["criado_por"],
+            updated_at=from_db(row["updated_at"]),
+        )
+
+
+@dataclass(slots=True)
 class Job:
     id: int
     guild_id: int
@@ -392,6 +411,67 @@ class Database:
         cursor = await self.conn.execute(
             "DELETE FROM escalation_rules WHERE guild_id = ? AND threshold = ?",
             (guild_id, threshold),
+        )
+        await self.conn.commit()
+        return cursor.rowcount > 0
+
+    # ------------------------------------------------------------------
+    # Modelos de mensagem
+    # ------------------------------------------------------------------
+
+    async def save_template(
+        self,
+        *,
+        guild_id: int,
+        nome: str,
+        tipo: str,
+        payload: dict[str, Any],
+        autor_id: int,
+    ) -> bool:
+        """Cria ou atualiza um modelo. Devolve True se criou um novo.
+
+        A checagem prévia existe porque, num upsert, o rowcount do SQLite é 1
+        nos dois casos — não dá para distinguir criação de atualização por ele.
+        """
+        novo = await self.get_template(guild_id, nome) is None
+        stamp = to_db(now())
+        await self.conn.execute(
+            "INSERT INTO message_templates (guild_id, nome, tipo, payload,"
+            " criado_por, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+            " ON CONFLICT (guild_id, nome) DO UPDATE SET"
+            "   tipo = excluded.tipo, payload = excluded.payload,"
+            "   updated_at = excluded.updated_at",
+            (guild_id, nome, tipo, json.dumps(payload), autor_id, stamp, stamp),
+        )
+        await self.conn.commit()
+        return novo
+
+    async def get_template(self, guild_id: int, nome: str) -> Template | None:
+        cursor = await self.conn.execute(
+            "SELECT * FROM message_templates WHERE guild_id = ? AND nome = ?",
+            (guild_id, nome),
+        )
+        row = await cursor.fetchone()
+        return Template.from_row(row) if row else None
+
+    async def list_templates(self, guild_id: int) -> list[Template]:
+        cursor = await self.conn.execute(
+            "SELECT * FROM message_templates WHERE guild_id = ? ORDER BY nome",
+            (guild_id,),
+        )
+        return [Template.from_row(row) for row in await cursor.fetchall()]
+
+    async def count_templates(self, guild_id: int) -> int:
+        cursor = await self.conn.execute(
+            "SELECT COUNT(*) AS n FROM message_templates WHERE guild_id = ?",
+            (guild_id,),
+        )
+        return (await cursor.fetchone())["n"]
+
+    async def delete_template(self, guild_id: int, nome: str) -> bool:
+        cursor = await self.conn.execute(
+            "DELETE FROM message_templates WHERE guild_id = ? AND nome = ?",
+            (guild_id, nome),
         )
         await self.conn.commit()
         return cursor.rowcount > 0
