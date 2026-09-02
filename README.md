@@ -20,6 +20,7 @@ Base arquitetural documentada em [GUIA-BOTS-DISCORD.md](GUIA-BOTS-DISCORD.md).
 | `cogs/escalation.py` | `/escalonamento ver`, `definir`, `remover` — punições automáticas por número de infrações |
 | `cogs/antiraid.py` | `/antiraid ver`, `configurar`, `liberar` — detecção de picos de entrada |
 | `cogs/builder.py` | `/embed criar` — painel interativo de criação de embeds |
+| `cogs/containers.py` | `/container criar` — painel de containers (Components V2) |
 
 **Ainda não implementado** (ver "Próximos passos"): gestão de regras do AutoMod via comando, Guild Scheduled Events, anti-raid.
 
@@ -65,6 +66,20 @@ Discord — que soma título, descrição, rodapé e autor, não só o texto.
 > O rascunho vive **apenas em memória**, com timeout de 15 minutos. É o oposto
 > dos painéis de self-role: um rascunho que sobrevivesse a um deploy seria
 > lixo acumulado, não funcionalidade.
+
+### Containers (Components V2)
+
+```
+/container criar
+```
+
+Monta o bloco com faixa colorida do Components V2. Blocos disponíveis:
+**Texto** (markdown completo — títulos, listas, negrito), **Seção** (texto com
+miniatura à direita), **Separador** e **Imagem**. Mais **Cor** da faixa,
+**Desfazer**, **Limpar** e seletor de canal.
+
+O painel mostra quantos componentes ainda cabem. Botões cujo bloco não caberia
+mais aparecem desabilitados, em vez de falhar no Publicar.
 
 ### Anti-raid
 
@@ -334,6 +349,16 @@ painel: um botão público que concede esses cargos é escalada de privilégio
 para qualquer membro. A checagem roda ao montar o painel **e de novo a cada
 clique**, porque as permissões de um cargo podem mudar depois. Quem cria o
 painel também não pode expor cargo igual ou acima do seu próprio.
+
+**No Components V2, o editor divide o orçamento com o que edita.** Uma mensagem
+V2 aceita no máximo 40 componentes **contando os aninhados**, e não comporta
+`content` nem `embeds` — tudo é componente. Por isso o painel de
+`/container criar` é ele mesmo um `LayoutView`: a prévia no topo é literalmente
+o que será publicado. A consequência menos óbvia é que os controles do painel
+ocupam 14 desses 40 enquanto você edita, então o limite de blocos durante a
+edição é mais apertado que o do resultado final. O custo de cada bloco é
+verificado em teste contra o payload real, para a conta não desandar em
+silêncio e virar um 400 no Publicar.
 
 **Anti-raid detecta em memória, mas desfaz com estado persistido.** A janela
 deslizante de entradas vive só na RAM — um raid é, por definição, algo
