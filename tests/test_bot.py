@@ -52,6 +52,12 @@ def test_intents_privilegiados_necessarios() -> None:
     assert intents.guilds is True
 
 
+def test_voice_states_ligado() -> None:
+    """Sem ele on_voice_state_update nunca dispara e a voz temporária fica
+    muda, sem erro nenhum. Não é privilegiado."""
+    assert build_intents().voice_states is True
+
+
 def test_message_content_permanece_desligado() -> None:
     """Decisão de desenho: os comandos são slash e a filtragem de conteúdo é
     do AutoMod nativo. Ligar isto exigiria revisar a política de privacidade."""
@@ -79,6 +85,7 @@ async def test_arvore_de_comandos(bot: Zenibot) -> None:
         "antiraid ver", "antiraid configurar", "antiraid liberar",
         "embed criar", "container criar",
         "modelo listar", "modelo usar", "modelo aplicar", "modelo apagar",
+        "voz ver", "voz configurar", "voz desativar",
     }
     assert esperados <= comandos
 

@@ -22,6 +22,7 @@ Base arquitetural documentada em [GUIA-BOTS-DISCORD.md](GUIA-BOTS-DISCORD.md).
 | `cogs/builder.py` | `/embed criar` — painel interativo de criação de embeds |
 | `cogs/containers.py` | `/container criar` — painel de containers (Components V2) |
 | `cogs/templates.py` | `/modelo listar`, `usar`, `aplicar`, `apagar` — modelos de mensagem salvos |
+| `cogs/tempvoice.py` | `/voz configurar`, `ver`, `desativar` — canais de voz temporários |
 
 **Ainda não implementado** (ver "Próximos passos"): gestão de regras do AutoMod via comando, Guild Scheduled Events, anti-raid.
 
@@ -81,6 +82,25 @@ miniatura à direita), **Separador** e **Imagem**. Mais **Cor** da faixa,
 
 O painel mostra quantos componentes ainda cabem. Botões cujo bloco não caberia
 mais aparecem desabilitados, em vez de falhar no Publicar.
+
+### Voz temporária
+
+Crie um canal de voz para servir de saguão e aponte o bot para ele:
+
+```
+/voz configurar saguao:🔊 Criar sala vagas:0 maximo:20
+```
+
+Quem entrar no saguão ganha um canal próprio e é movido para lá. O canal some
+quando esvazia. **O dono recebe permissão no próprio canal**, então renomeia,
+muda as vagas e expulsa gente pela interface do Discord — sem painel do bot no
+meio.
+
+Renomear tem um limite do Discord de **2 vezes a cada 10 minutos por canal**;
+a terceira tentativa seguida simplesmente não pega.
+
+`/voz desativar` desliga e remove os canais vazios; os que ainda estão em uso
+continuam até esvaziarem.
 
 ### Modelos salvos
 
@@ -380,6 +400,14 @@ painel: um botão público que concede esses cargos é escalada de privilégio
 para qualquer membro. A checagem roda ao montar o painel **e de novo a cada
 clique**, porque as permissões de um cargo podem mudar depois. Quem cria o
 painel também não pode expor cargo igual ou acima do seu próprio.
+
+**Canal temporário só é apagado por evento de saída.** Entre criar o canal e
+mover a pessoa para dentro existe uma janela em que ele está legitimamente
+vazio; apagar "todo canal vazio" o destruiria antes de alguém entrar. Disparar
+a exclusão apenas quando alguém *sai* de um canal temporário garante que ele
+teve gente. O que essa regra não cobre — o bot cair com canais abertos — é
+resolvido pela varredura de inicialização, e é por isso que a tabela existe:
+sem ela não haveria como saber quais canais são nossos depois de um restart.
 
 **No Components V2, o editor divide o orçamento com o que edita.** Uma mensagem
 V2 aceita no máximo 40 componentes **contando os aninhados**, e não comporta

@@ -56,6 +56,10 @@ class GuildConfig:
     raid_window_s: int = 60
     raid_action: str = "alert"
     raid_lockdown_minutes: int = 15
+    voice_lobby_id: int | None = None
+    voice_category_id: int | None = None
+    voice_user_limit: int = 0
+    voice_max_channels: int = 20
 
     @classmethod
     def from_row(cls, row: aiosqlite.Row) -> GuildConfig:
@@ -72,6 +76,10 @@ class GuildConfig:
             raid_window_s=row["raid_window_s"],
             raid_action=row["raid_action"],
             raid_lockdown_minutes=row["raid_lockdown_minutes"],
+            voice_lobby_id=row["voice_lobby_id"],
+            voice_category_id=row["voice_category_id"],
+            voice_user_limit=row["voice_user_limit"],
+            voice_max_channels=row["voice_max_channels"],
         )
 
 
@@ -279,6 +287,10 @@ class Database:
             "raid_window_s",
             "raid_action",
             "raid_lockdown_minutes",
+            "voice_lobby_id",
+            "voice_category_id",
+            "voice_user_limit",
+            "voice_max_channels",
         }
         unknown = set(fields) - allowed
         if unknown:
@@ -414,6 +426,67 @@ class Database:
         )
         await self.conn.commit()
         return cursor.rowcount > 0
+
+    # ------------------------------------------------------------------
+    # Canais de voz temporários
+    # ------------------------------------------------------------------
+
+    async def add_temp_voice(
+        self, *, channel_id: int, guild_id: int, owner_id: int
+    ) -> None:
+        await self.conn.execute(
+            "INSERT OR REPLACE INTO temp_voice_channels"
+            " (channel_id, guild_id, owner_id, created_at) VALUES (?, ?, ?, ?)",
+            (channel_id, guild_id, owner_id, to_db(now())),
+        )
+        await self.conn.commit()
+
+    async def is_temp_voice(self, channel_id: int) -> bool:
+        cursor = await self.conn.execute(
+            "SELECT 1 FROM temp_voice_channels WHERE channel_id = ?", (channel_id,)
+        )
+        return await cursor.fetchone() is not None
+
+    async def remove_temp_voice(self, channel_id: int) -> bool:
+        cursor = await self.conn.execute(
+            "DELETE FROM temp_voice_channels WHERE channel_id = ?", (channel_id,)
+        )
+        await self.conn.commit()
+        return cursor.rowcount > 0
+
+    async def temp_voice_of_owner(self, guild_id: int, owner_id: int) -> int | None:
+        """Canal que a pessoa já tem aberto, se houver.
+
+        É o que evita que entrar e sair do saguão em sequência crie uma fila
+        de canais para a mesma pessoa.
+        """
+        cursor = await self.conn.execute(
+            "SELECT channel_id FROM temp_voice_channels"
+            " WHERE guild_id = ? AND owner_id = ? LIMIT 1",
+            (guild_id, owner_id),
+        )
+        row = await cursor.fetchone()
+        return row["channel_id"] if row else None
+
+    async def count_temp_voice(self, guild_id: int) -> int:
+        cursor = await self.conn.execute(
+            "SELECT COUNT(*) AS n FROM temp_voice_channels WHERE guild_id = ?",
+            (guild_id,),
+        )
+        return (await cursor.fetchone())["n"]
+
+    async def list_temp_voice(self, guild_id: int | None = None) -> list[tuple[int, int]]:
+        """(channel_id, guild_id) — sem guild_id, devolve de todas as guilds."""
+        if guild_id is None:
+            cursor = await self.conn.execute(
+                "SELECT channel_id, guild_id FROM temp_voice_channels"
+            )
+        else:
+            cursor = await self.conn.execute(
+                "SELECT channel_id, guild_id FROM temp_voice_channels WHERE guild_id = ?",
+                (guild_id,),
+            )
+        return [(row["channel_id"], row["guild_id"]) for row in await cursor.fetchall()]
 
     # ------------------------------------------------------------------
     # Modelos de mensagem

@@ -248,6 +248,8 @@ async def test_migracao_sobre_banco_ja_povoado(tmp_path) -> None:
         assert await db.get_escalation_rules(1) == []
         assert (await db.get_config(1)).raid_joins == 0
         assert await db.list_templates(1) == []
+        assert (await db.get_config(1)).voice_lobby_id is None
+        assert await db.list_temp_voice(1) == []
     finally:
         await db.close()
 

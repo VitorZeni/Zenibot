@@ -28,6 +28,7 @@ INITIAL_COGS = (
     "zenibot.cogs.builder",
     "zenibot.cogs.containers",
     "zenibot.cogs.templates",
+    "zenibot.cogs.tempvoice",
 )
 
 
@@ -47,6 +48,9 @@ def build_intents() -> discord.Intents:
     intents.moderation = True                 # bans + audit log entries
     intents.auto_moderation_execution = True  # reagir a acionamentos do AutoMod
     intents.guild_scheduled_events = True     # eventos nativos do servidor
+    # Não é privilegiado, mas sem ele on_voice_state_update nunca dispara e a
+    # voz temporária fica muda — sem erro nenhum.
+    intents.voice_states = True
     return intents
 
 
