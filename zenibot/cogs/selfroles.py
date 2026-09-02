@@ -119,6 +119,11 @@ class ClickCooldown:
         self._per = per
         self._hits: dict[tuple[int, int], list[float]] = {}
 
+    def clear(self) -> None:
+        """Esquece todos os registros. Usado para isolar testes — em produção
+        a poda oportunista de `hit` já dá conta."""
+        self._hits.clear()
+
     def hit(self, guild_id: int, user_id: int) -> float | None:
         """None se pode prosseguir; senão, quantos segundos faltam."""
         agora = time.monotonic()
@@ -198,7 +203,7 @@ class RoleToggleButton(
     async def toggle(self, interaction: discord.Interaction) -> None:
         guild = interaction.guild
         member = interaction.user
-        if guild is None or not isinstance(member, discord.Member):
+        if guild is None:
             raise ZenibotError("Este botão só funciona dentro de um servidor.")
 
         restante = _cooldown.hit(guild.id, member.id)

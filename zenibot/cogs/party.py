@@ -199,7 +199,7 @@ class Party(commands.Cog):
         if grupo is None:
             raise ZenibotError("Esse grupo não existe mais.")
         if interaction.user.id != grupo.owner_id and not (
-            isinstance(interaction.user, discord.Member)
+            interaction.guild is not None
             and interaction.user.guild_permissions.manage_guild
         ):
             raise ZenibotError("Só quem organizou o grupo pode encerrá-lo.")

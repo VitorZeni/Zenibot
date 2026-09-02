@@ -35,9 +35,12 @@ async def e_staff(interaction: discord.Interaction) -> bool:
     não passam pelo sistema de checks dos slash commands e precisavam
     reimplementar a mesma regra.
     """
-    membro = interaction.user
-    if not isinstance(membro, discord.Member):
+    # Fora de guild não existe staff. Perguntar pela guild diz isso
+    # diretamente; checar o tipo de `user` era só um proxy para a mesma
+    # pergunta — dentro de uma guild ele já é Member por definição.
+    if interaction.guild is None:
         return False
+    membro = interaction.user
     if membro.guild_permissions.manage_guild:
         return True
     config = await interaction.client.db.get_config(interaction.guild_id)  # type: ignore[attr-defined]
@@ -48,7 +51,7 @@ def is_staff():
     """Versão decorador de `e_staff`, para slash commands."""
 
     async def predicate(interaction: discord.Interaction) -> bool:
-        if not isinstance(interaction.user, discord.Member):
+        if interaction.guild is None:
             raise ZenibotError("Este comando só funciona dentro de um servidor.")
         if await e_staff(interaction):
             return True

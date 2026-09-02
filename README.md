@@ -466,6 +466,13 @@ para qualquer membro. A checagem roda ao montar o painel **e de novo a cada
 clique**, porque as permissões de um cargo podem mudar depois. Quem cria o
 painel também não pode expor cargo igual ou acima do seu próprio.
 
+**Banco real, Discord falso.** Os callbacks de botão rodam contra SQLite de
+verdade, com apenas a camada que fala com a API substituída por dublês
+(`tests/fakes.py`). Assim a lógica exercitada é a de produção, e o que o teste
+observa é o que o usuário teria recebido. Os dublês são classes, e não
+`SimpleNamespace`, porque overwrites exigem hashabilidade e a hierarquia de
+cargos exige `__ge__` de verdade.
+
 **Os listeners de evento têm teste de integração; as interações, não.** Os
 caminhos disparados pelo Gateway — `on_member_join` com boas-vindas, triagem
 de conta nova e anti-raid — rodam contra uma guild falsa do `dpytest`, com
@@ -595,11 +602,9 @@ tudo dentro de `core/db.py`:
       próprio, isolado do bucket do bot
 - [ ] **Gestão de regras do AutoMod** por slash command
 - [ ] **Guild Scheduled Events** — espelhar em banco e lembrar os interessados
-- [ ] **Cobrir interações** (slash commands, botões, modais). O `dpytest` não
-      ajuda: a API dele é da era dos comandos por prefixo e não expõe nada de
-      interação — há um teste em `test_integration.py` que falha de propósito
-      se uma versão futura passar a expor. O caminho viável é ampliar os
-      dublês de interação que já existem em `test_errors.py`.
+- [ ] **Cobrir os slash commands** com os mesmos dublês de `tests/fakes.py`.
+      Os callbacks de botão já estão cobertos; falta o corpo dos comandos,
+      que hoje só é exercitado no servidor.
 
 ---
 
@@ -630,6 +635,7 @@ pytest
 | `tests/test_bot.py` | Configuração, intents, carga de cogs, árvore de comandos, backup e retenção |
 | `tests/test_supervise.py` | Reconexão com backoff e os erros que **não** devem ser repetidos |
 | `tests/test_integration.py` | Eventos de Gateway numa guild falsa (dpytest): boas-vindas, triagem, anti-raid |
+| `tests/test_interactions.py` | Callbacks de botão com banco real e Discord falso (`tests/fakes.py`) |
 
 Para validar uma **imagem Docker** — onde a suíte não existe, por ser
 dependência de desenvolvimento — use a verificação de deploy:
