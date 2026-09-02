@@ -24,6 +24,7 @@ Base arquitetural documentada em [GUIA-BOTS-DISCORD.md](GUIA-BOTS-DISCORD.md).
 | `cogs/templates.py` | `/modelo listar`, `usar`, `aplicar`, `apagar` — modelos de mensagem salvos |
 | `cogs/tempvoice.py` | `/voz configurar`, `ver`, `desativar` — canais de voz temporários |
 | `cogs/tickets.py` | `/ticket configurar`, `painel`, `status` — atendimento por canal privado |
+| `cogs/channels.py` | `/canal criar`, `acesso` — canais visíveis só para certos cargos |
 
 **Ainda não implementado** (ver "Próximos passos"): gestão de regras do AutoMod via comando, Guild Scheduled Events, anti-raid.
 
@@ -83,6 +84,21 @@ miniatura à direita), **Separador** e **Imagem**. Mais **Cor** da faixa,
 
 O painel mostra quantos componentes ainda cabem. Botões cujo bloco não caberia
 mais aparecem desabilitados, em vez de falhar no Publicar.
+
+### Canais privados por cargo
+
+```
+/canal criar nome:sala-da-staff tipo:Texto
+/canal acesso canal:#sala-da-staff cargo:@Suporte
+```
+
+O `/canal criar` abre um seletor de cargos com prévia: quem vai enxergar, onde
+o canal será criado e qual nome ele terá de fato. Substitui o ritual de criar
+o canal e depois ajustar seis chaves de permissão à mão.
+
+Quem executa o comando entra na lista automaticamente — sem isso dá para criar
+um canal que você mesmo não consegue ver. `/canal acesso` alterna um cargo em
+um canal já existente.
 
 ### Tickets
 
@@ -420,6 +436,12 @@ painel: um botão público que concede esses cargos é escalada de privilégio
 para qualquer membro. A checagem roda ao montar o painel **e de novo a cada
 clique**, porque as permissões de um cargo podem mudar depois. Quem cria o
 painel também não pode expor cargo igual ou acima do seu próprio.
+
+**Canal privado não guarda estado paralelo.** Quem enxerga um canal já está
+registrado nas permissões dele, que é onde o Discord guarda isso. Uma tabela
+espelhando essa informação só teria como se desatualizar no dia em que alguém
+mexesse nas permissões pela interface — e aí passaria a mentir. Por isso
+`/canal` é o único recurso deste porte sem migração.
 
 **Um ticket aberto por pessoa, e assumir é atômico.** Sem a primeira trava,
 clique repetido no painel encheria o servidor de canais — e o teto do Discord

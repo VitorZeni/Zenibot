@@ -30,6 +30,7 @@ INITIAL_COGS = (
     "zenibot.cogs.templates",
     "zenibot.cogs.tempvoice",
     "zenibot.cogs.tickets",
+    "zenibot.cogs.channels",
 )
 
 
