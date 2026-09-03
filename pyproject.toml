@@ -14,6 +14,9 @@ dependencies = [
     "aiohttp>=3.9",
     "aiosqlite>=0.20",
     "pydantic-settings>=2.4",
+    # Front matter dos capítulos da base de conhecimento. Escrever um parser
+    # à mão para YAML é fonte clássica de bug silencioso em citação.
+    "pyyaml>=6",
 ]
 
 [project.optional-dependencies]

@@ -15,6 +15,11 @@ services:
 
     volumes:
       - zenibot-data:/app/data
+      # Base de conhecimento consultada por /aion. O acervo fica FORA do
+      # repositório de propósito — é obra de terceiros e o repositório é
+      # público. Monte a pasta local como somente-leitura e defina
+      # ZENIBOT_KB_PATH=/app/conhecimento no .env para ativar.
+      # - "D:/Documentos/Vitor/Projetos/MMORPG/AION2/base-conhecimento-traduzida:/app/conhecimento:ro"
 
     # Complementa o supervisor interno: ele cobre falhas de rede transitórias
     # dentro do processo; isto cobre o processo morrer de vez.

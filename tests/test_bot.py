@@ -89,6 +89,7 @@ async def test_arvore_de_comandos(bot: Zenibot) -> None:
         "ticket configurar", "ticket painel", "ticket status",
         "canal criar", "canal acesso",
         "grupo criar",
+        "aion capitulo", "aion buscar", "aion indice", "aion recarregar",
     }
     assert esperados <= comandos
 
