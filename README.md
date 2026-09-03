@@ -25,6 +25,7 @@ Base arquitetural documentada em [GUIA-BOTS-DISCORD.md](GUIA-BOTS-DISCORD.md).
 | `cogs/tempvoice.py` | `/voz configurar`, `ver`, `desativar` — canais de voz temporários |
 | `cogs/tickets.py` | `/ticket configurar`, `painel`, `status` — atendimento por canal privado |
 | `cogs/channels.py` | `/canal criar`, `acesso` — canais visíveis só para certos cargos |
+| `cogs/roles.py` | `/cargo criar`, `editar`, `apagar` — gestão de cargos |
 | `cogs/party.py` | `/grupo criar` — montagem de grupo com vagas por função |
 
 **Ainda não implementado** (ver "Próximos passos"): gestão de regras do AutoMod via comando, Guild Scheduled Events, anti-raid.
@@ -107,6 +108,28 @@ que aparece na aba de eventos (exige a permissão Gerenciar Eventos).
 
 Sem nenhuma vaga informada, o padrão é 5 participantes sem função definida —
 serve para qualquer atividade que não use a tríade de MMORPG.
+
+### Cargos
+
+```
+/cargo criar nome:Raider cor:vermelho destacado:true
+/cargo editar cargo:@Raider cor:#5865F2
+/cargo apagar cargo:@Raider
+```
+
+A cor aceita hex (`#5865F2`, `5865F2`, `#58F`) ou nome em português
+(`vermelho`, `azul`, `verde`). No `editar`, `cor:nenhuma` remove a cor.
+Apagar pede confirmação e diz quantos membros perderiam o cargo.
+
+> **O cargo nasce sem permissão nenhuma**, e isso é decisão de desenho. Um
+> staff com Gerenciar Cargos poderia criar um cargo `administrator` e se dar —
+> permissão de servidor continua na interface do Discord, onde as travas dele
+> valem. Para dar acesso a canal, use `/canal acesso`.
+
+Ninguém mexe em cargo do próprio nível ou acima: sem essa trava, um moderador
+poderia renomear ou apagar o cargo de administrador pelo bot. O dono do
+servidor ignora a trava, como no Discord — mas o bot continua limitado ao que
+está abaixo dele.
 
 ### Canais privados por cargo
 
@@ -508,6 +531,12 @@ verdade — a escolha vira visual. O hex continua para quem precisa de um tom
 exato, e o texto aceita nomes. Os emojis usados são os quadrados padrão do
 Unicode 12, e não os recentes como 🩷, que aparecem como caixa vazia em
 clientes antigos.
+
+**O bot cria cargo, mas não concede poder.** `/cargo criar` faz o cargo nascer
+com zero permissões. É onde a conveniência para de valer a pena: automatizar a
+criação poupa cliques, automatizar a concessão de permissão transformaria o bot
+em atalho de escalada de privilégio para qualquer um com Gerenciar Cargos. A
+tela de permissões do Discord aplica as travas dele; o bot não tenta substituí-la.
 
 **Canal privado não guarda estado paralelo.** Quem enxerga um canal já está
 registrado nas permissões dele, que é onde o Discord guarda isso. Uma tabela
