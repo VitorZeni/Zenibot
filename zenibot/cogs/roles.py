@@ -140,6 +140,12 @@ class Roles(commands.Cog):
         nome = roles.validar_nome(nome)
         cor_final = parse_cor_ou_erro(cor) if cor else None
 
+        # Avisar o Discord ANTES da chamada de API. A janela para a primeira
+        # resposta é de 3 segundos; criar o cargo é um round-trip, e um pico
+        # de latência no gateway faria a resposta chegar tarde demais —
+        # "Unknown interaction", com o cargo já criado.
+        await interaction.response.defer(ephemeral=True)
+
         try:
             novo = await guild.create_role(
                 name=nome,
@@ -158,7 +164,7 @@ class Roles(commands.Cog):
             text="Nasce sem permissões. Conceda acesso a canais com /canal acesso, "
             "ou permissões de servidor pelas configurações do Discord."
         )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @cargo.command(name="editar", description="Altera nome, cor ou visibilidade")
     @app_commands.describe(
@@ -201,6 +207,8 @@ class Roles(commands.Cog):
                 "ou mencionavel."
             )
 
+        await interaction.response.defer(ephemeral=True)
+
         try:
             atualizado = await cargo.edit(
                 **campos, reason=f"Editado por {interaction.user}"
@@ -210,7 +218,7 @@ class Roles(commands.Cog):
 
         # `edit` devolve o cargo atualizado; o objeto original ainda carrega os
         # valores antigos até o cache receber o evento.
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=ficha(atualizado or cargo), ephemeral=True
         )
 

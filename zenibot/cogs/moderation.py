@@ -299,6 +299,9 @@ class Moderation(commands.Cog):
         if registro is None:
             raise ZenibotError(f"Caso #{numero} não existe neste servidor.")
 
+        # Dois fetch_user são dois round-trips ao Discord. Sem o defer, um
+        # pico de latência estoura a janela de 3 segundos da interação.
+        await interaction.response.defer(ephemeral=True)
         alvo = await self.bot.fetch_user(registro.user_id)
         moderador = await self.bot.fetch_user(registro.moderator_id)
         embed = embeds.case_embed(
@@ -316,7 +319,7 @@ class Moderation(commands.Cog):
         embed.add_field(
             name="Quando", value=embeds.timestamp(registro.created_at), inline=False
         )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @app_commands.command(name="historico", description="Histórico de moderação de um usuário")
     @app_commands.describe(usuario="Quem consultar")

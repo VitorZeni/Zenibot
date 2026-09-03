@@ -40,6 +40,10 @@ class FakeRole:
         *,
         managed: bool = False,
         default: bool = False,
+        colour: int = 0,
+        hoist: bool = False,
+        mentionable: bool = False,
+        members: list | None = None,
         **perms,
     ) -> None:
         self.id = id
@@ -47,8 +51,25 @@ class FakeRole:
         self.position = position
         self.mention = f"<@&{id}>"
         self.permissions = discord.Permissions(**perms)
+        self.colour = discord.Colour(colour)
+        self.hoist = hoist
+        self.mentionable = mentionable
+        self.members = members or []
         self._managed = managed
         self._default = default
+
+    @property
+    def color(self) -> discord.Colour:
+        return self.colour
+
+    async def edit(self, *, reason: str | None = None, **campos) -> FakeRole:
+        """Aplica os campos e devolve a si mesmo, como o `Role.edit` real."""
+        for chave, valor in campos.items():
+            setattr(self, "colour" if chave == "color" else chave, valor)
+        return self
+
+    async def delete(self, *, reason: str | None = None) -> None:
+        self.apagado = reason
 
     def is_bot_managed(self) -> bool:
         return self._managed
@@ -193,8 +214,20 @@ class FakeGuild:
         for canal in self._canais.values():
             canal.guild = self
         self._membros: dict[int, FakeMember] = {}
+        self.roles = list(roles or [])
         self.banidos: list[tuple] = []
         self.desbanidos: list[int] = []
+
+    async def create_role(self, *, name: str, **kwargs) -> FakeRole:
+        cargo = FakeRole(
+            id=1000 + len(self._roles),
+            name=name,
+            position=1,
+        )
+        cargo.criado_com = kwargs
+        self._roles[cargo.id] = cargo
+        self.roles.append(cargo)
+        return cargo
 
     async def ban(self, alvo, *, reason=None, delete_message_seconds=0) -> None:
         self.banidos.append((alvo, reason, delete_message_seconds))

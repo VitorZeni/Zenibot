@@ -532,6 +532,14 @@ exato, e o texto aceita nomes. Os emojis usados são os quadrados padrão do
 Unicode 12, e não os recentes como 🩷, que aparecem como caixa vazia em
 clientes antigos.
 
+**Avisar o Discord vem antes de trabalhar.** A janela para a primeira resposta
+a uma interação é de **3 segundos**. Todo comando que chama a API antes de
+responder está a um pico de latência de falhar com *Unknown interaction* — e o
+usuário vê "o aplicativo não respondeu" **com o efeito já aplicado**, que é o
+pior dos dois mundos. Por isso qualquer comando que faça round-trip começa com
+`defer()` e responde pelo `followup`. Isso aconteceu de verdade em produção,
+com o gateway a 5 s de latência.
+
 **O bot cria cargo, mas não concede poder.** `/cargo criar` faz o cargo nascer
 com zero permissões. É onde a conveniência para de valer a pena: automatizar a
 criação poupa cliques, automatizar a concessão de permissão transformaria o bot

@@ -15,6 +15,7 @@ from zenibot.bot import Zenibot
 from zenibot.cogs.admin import Admin
 from zenibot.cogs.moderation import Moderation
 from zenibot.cogs.party import Party
+from zenibot.cogs.roles import Roles
 from zenibot.cogs.tickets import Tickets
 from zenibot.core.checks import ZenibotError
 
@@ -276,6 +277,59 @@ async def test_ticket_painel_exige_categoria_configurada(bot: Zenibot) -> None:
 # ---------------------------------------------------------------------------
 # /grupo criar
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Janela de 3 segundos da interação
+# ---------------------------------------------------------------------------
+
+
+async def test_cargo_criar_avisa_antes_de_chamar_a_api(bot: Zenibot) -> None:
+    """Regressão de um erro visto em produção: com o gateway lento, um comando
+    que chama a API antes de responder perde a janela de 3 segundos e o
+    usuário vê "o aplicativo não respondeu" — com o efeito já aplicado.
+
+    Responder pelo followup só é possível depois de um defer, então é isso que
+    se verifica aqui.
+    """
+    guild = FakeGuild()
+    interaction = FakeInteraction(client=bot, guild=guild, user=FakeMember(1))
+
+    await executa(bot, Roles.criar, interaction, nome="Raider", cor="vermelho")
+
+    assert interaction.response.enviado is None, "não devia responder direto"
+    assert interaction.followup.enviado is not None, "faltou o defer + followup"
+    assert any(c.name == "Raider" for c in guild.roles)
+
+
+async def test_cargo_editar_avisa_antes_de_chamar_a_api(bot: Zenibot) -> None:
+    guild = FakeGuild()
+    alvo = FakeRole(500, "Antigo", 10)
+    interaction = FakeInteraction(client=bot, guild=guild, user=FakeMember(1))
+
+    await executa(bot, Roles.editar, interaction, cargo=alvo, nome="Novo")
+
+    assert interaction.response.enviado is None
+    assert interaction.followup.enviado is not None
+
+
+async def test_caso_avisa_antes_dos_dois_fetch(bot: Zenibot, monkeypatch) -> None:
+    """`/caso` fazia dois round-trips ao Discord antes de dar sinal de vida."""
+    guild, mod, alvo, _ = cenario()
+    i1 = FakeInteraction(client=bot, guild=guild, user=mod)
+    await executa(bot, Moderation.warn, i1, membro=alvo, motivo="x")
+
+    # fetch_user vai à API; aqui interessa só a ordem entre responder e buscar.
+    async def fetch_falso(user_id: int) -> FakeMember:
+        return FakeMember(user_id, f"user{user_id}")
+
+    monkeypatch.setattr(bot, "fetch_user", fetch_falso)
+
+    i2 = FakeInteraction(client=bot, guild=guild, user=mod)
+    await executa(bot, Moderation.case, i2, numero=1)
+
+    assert i2.response.enviado is None
+    assert i2.followup.enviado is not None
 
 
 async def test_grupo_sem_vagas_usa_o_padrao(bot: Zenibot) -> None:

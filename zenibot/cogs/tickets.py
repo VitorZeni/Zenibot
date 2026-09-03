@@ -389,12 +389,15 @@ class Tickets(commands.Cog):
         destino = canal or interaction.channel
         exigir_publicavel(destino, interaction.guild.me)
 
+        # Publicar é um round-trip; avisar o Discord antes evita perder a
+        # janela de 3 segundos e responder a uma interação já expirada.
+        await interaction.response.defer(ephemeral=True)
         await destino.send(
             embed=embeds.info(descricao, title=titulo),
             view=painel_view(),
             allowed_mentions=embeds.NO_MENTIONS,
         )
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=embeds.ok(f"Painel publicado em {destino.mention}."), ephemeral=True
         )
 
