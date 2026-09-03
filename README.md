@@ -26,7 +26,6 @@ Base arquitetural documentada em [GUIA-BOTS-DISCORD.md](GUIA-BOTS-DISCORD.md).
 | `cogs/tickets.py` | `/ticket configurar`, `painel`, `status` — atendimento por canal privado |
 | `cogs/channels.py` | `/canal criar`, `acesso` — canais visíveis só para certos cargos |
 | `cogs/party.py` | `/grupo criar` — montagem de grupo com vagas por função |
-| `cogs/kb.py` | `/aion capitulo`, `buscar`, `indice` — consulta a uma base de conhecimento |
 
 **Ainda não implementado** (ver "Próximos passos"): gestão de regras do AutoMod via comando, Guild Scheduled Events, anti-raid.
 
@@ -90,30 +89,6 @@ miniatura à direita), **Separador** e **Imagem**. Mais **Cor** da faixa,
 
 O painel mostra quantos componentes ainda cabem. Botões cujo bloco não caberia
 mais aparecem desabilitados, em vez de falhar no Publicar.
-
-### Base de conhecimento
-
-```
-/aion indice
-/aion buscar termo:accuracy
-/aion capitulo:03-stat-lines-ideais-e-caps
-```
-
-Consulta capítulos em Markdown com front matter YAML. O `capitulo` tem
-autocomplete alimentado pelas `tags` do front matter, e a resposta traz o
-bloco de resumo do arquivo, o crédito ao autor e os avisos obrigatórios da
-fonte.
-
-> **O acervo não vive neste repositório.** Ele é obra de terceiros e este
-> repositório é público — versionar os capítulos aqui seria redistribuir o
-> trabalho de outra pessoa. Aponte `ZENIBOT_KB_PATH` para a pasta local; no
-> Docker, monte-a como somente-leitura (há exemplo comentado no
-> `docker-compose.yml`). Sem a variável, os comandos apenas avisam que o
-> acervo não está configurado.
-
-Formato esperado de cada arquivo: front matter YAML, um bloco de resumo, uma
-linha `---`, e o capítulo completo. É o bloco antes do `---` que o bot
-publica — ele já tem o tamanho de uma resposta.
 
 ### Grupos e raides
 
@@ -490,13 +465,6 @@ painel: um botão público que concede esses cargos é escalada de privilégio
 para qualquer membro. A checagem roda ao montar o painel **e de novo a cada
 clique**, porque as permissões de um cargo podem mudar depois. Quem cria o
 painel também não pode expor cargo igual ou acima do seu próprio.
-
-**O bot recorta, não redige.** As respostas de `/aion` são o bloco de resumo
-que já está escrito no arquivo, mais crédito e avisos. Não há geração de
-texto — logo, não há como inventar um número. Num acervo cujo valor inteiro
-está na precisão dos números, isso é o requisito, não uma limitação. Uma
-camada de RAG mudaria essa propriedade e precisa ser decisão consciente, não
-consequência de conveniência.
 
 **Banco real, Discord falso.** Os callbacks de botão rodam contra SQLite de
 verdade, com apenas a camada que fala com a API substituída por dublês

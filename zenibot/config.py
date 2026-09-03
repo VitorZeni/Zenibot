@@ -37,11 +37,6 @@ class Settings(BaseSettings):
     # Aviso no canal de alertas quando o bot sobe.
     startup_notice: bool = True
 
-    # Diretório da base de conhecimento (capítulos .md com front matter).
-    # Fica FORA do repositório de propósito: o acervo é obra de terceiros e o
-    # repositório é público. Vazio desativa os comandos de consulta.
-    kb_path: Path | None = None
-
     @field_validator("owner_ids", mode="before")
     @classmethod
     def _parse_owner_ids(cls, v: object) -> object:
@@ -60,13 +55,6 @@ class Settings(BaseSettings):
         path = self.db_path if self.db_path.is_absolute() else ROOT / self.db_path
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
-
-    @property
-    def kb_dir(self) -> Path | None:
-        """Caminho absoluto do acervo, ou None se não configurado."""
-        if self.kb_path is None:
-            return None
-        return self.kb_path if self.kb_path.is_absolute() else ROOT / self.kb_path
 
     @property
     def backup_dir(self) -> Path:
